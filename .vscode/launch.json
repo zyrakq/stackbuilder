@@ -1,0 +1,52 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug executable 'stackbuilder'",
+      "cargo": {
+        "args": [
+          "build",
+          "--bin=stackbuilder",
+          "--package=stackbuilder"
+        ],
+        "filter": {
+          "name": "stackbuilder",
+          "kind": "bin"
+        }
+      },
+      "args": [
+        //"-k=29509fc2-cedc-4c1b-8d24-017dc44c3a3f"
+      ],
+      "env": {
+        // "RUST_BACKTRACE": "1"
+        "WAYBAR_MARKET__API_KEY": "29509fc2-cedc-4c1b-8d24-017dc44c3a3f",
+        "WAYBAR_MARKET__CONFIG_PATH": "./config.ini"
+      },
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in executable 'stackbuilder'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--bin=stackbuilder",
+          "--package=stackbuilder"
+        ],
+        "filter": {
+          "name": "stackbuilder",
+          "kind": "bin"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}

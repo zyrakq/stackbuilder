@@ -1,0 +1,9 @@
+{
+  "git.openRepositoryInParentFolders": "never",
+  "git.detectSubmodules": false,
+  "git.scanRepositories": [],
+  "git.autoRepositoryDetection": false,
+  "files.associations": {
+    ".gitmessage": "plaintext"
+  }
+}
