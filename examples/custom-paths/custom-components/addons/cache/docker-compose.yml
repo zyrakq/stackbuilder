@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  # Redis cache service
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # Redis Insight for cache monitoring
+  redis-insight:
+    image: redislabs/redisinsight:latest
+    ports:
+      - "8001:8001"
+    volumes:
+      - redis_insight_data:/db
+    depends_on:
+      - redis
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # Memcached as alternative cache
+  memcached:
+    image: memcached:1.6-alpine
+    command: memcached -m 64 -p 11211 -u memcache -l 0.0.0.0
+    ports:
+      - "11211:11211"
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # Cache warming service
+  cache-warmer:
+    image: alpine:3.17
+    command: |
+      sh -c "
+        apk add --no-cache curl redis
+        while true; do
+          echo 'Warming up cache...'
+          curl -f http://api:3000/api/warm-cache || echo 'Cache warm failed'
+          redis-cli -h redis PING
+          sleep 300
+        done
+      "
+    depends_on:
+      - redis
+      - api
+    networks:
+      - app-network
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+    driver: local
+  redis_insight_data:
+    driver: local

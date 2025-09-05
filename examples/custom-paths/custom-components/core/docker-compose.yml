@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  # Core application service
+  api:
+    image: node:18-alpine
+    working_dir: /app
+    volumes:
+      - ./app:/app
+      - api_modules:/app/node_modules
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # Core database
+  db:
+    image: mysql:8.0
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootpassword
+      - MYSQL_DATABASE=appdb
+      - MYSQL_USER=appuser
+      - MYSQL_PASSWORD=apppassword
+    volumes:
+      - db_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    restart: unless-stopped
+    networks:
+      - app-network
+
+volumes:
+  api_modules:
+    driver: local
+  db_data:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge

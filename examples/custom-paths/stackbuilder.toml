@@ -1,0 +1,10 @@
+[paths]
+components_dir = "./custom-components"
+base_dir = "core"
+environments_dir = "envs"
+extensions_dirs = ["addons", "plugins", "modules"]
+build_dir = "./output"
+
+[build]
+environments = ["dev", "qa"]
+extensions = ["cache", "security"]

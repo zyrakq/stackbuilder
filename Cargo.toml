@@ -15,3 +15,8 @@ toml = "0.9.5"
 anyhow = "1.0"
 yaml-rust = "0.4"
 thiserror = "2.0.16"
+
+[dev-dependencies]
+tempfile = "3.8"
+assert_fs = "1.0"
+predicates = "3.0"

@@ -5,6 +5,9 @@ mod config;
 mod init;
 mod build;
 
+#[cfg(test)]
+mod tests;
+
 #[derive(Parser)]
 #[command(name = "stackbuilder")]
 #[command(version)]

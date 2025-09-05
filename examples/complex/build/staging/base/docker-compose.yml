@@ -1,0 +1,123 @@
+---
+version: "3.8"
+services:
+  web:
+    image: "nginx:1.21-alpine"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "./nginx.conf:/etc/nginx/nginx.conf:ro"
+      - "web_data:/var/www/html"
+      - "./nginx-staging.conf:/etc/nginx/nginx.conf:ro"
+      - "staging_ssl_certs:/etc/ssl/certs:ro"
+      - "staging_ssl_keys:/etc/ssl/private:ro"
+    depends_on:
+      - app
+    restart: unless-stopped
+    networks:
+      - frontend
+      - backend
+    environment:
+      - ENVIRONMENT=staging
+      - SSL_CERT_PATH=/etc/ssl/certs/staging.crt
+      - SSL_KEY_PATH=/etc/ssl/private/staging.key
+  app:
+    image: "node:16-alpine"
+    working_dir: /app
+    volumes:
+      - "./app:/app"
+      - "node_modules:/app/node_modules"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - NODE_ENV=staging
+      - "API_BASE_URL=https://api-staging.example.com"
+      - ENABLE_PROFILING=true
+    expose:
+      - "3000"
+    depends_on:
+      - database
+      - cache
+    restart: unless-stopped
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "0.5"
+        reservations:
+          memory: 512M
+          cpus: "0.25"
+  database:
+    image: "postgres:13-alpine"
+    environment:
+      - POSTGRES_DB=appdb
+      - POSTGRES_USER=appuser
+      - POSTGRES_PASSWORD=secure_password
+      - POSTGRES_DB=appdb_staging
+      - POSTGRES_USER=staginguser
+      - "POSTGRES_PASSWORD=${STAGING_DB_PASSWORD}"
+    volumes:
+      - "postgres_data:/var/lib/postgresql/data"
+      - "./init.sql:/docker-entrypoint-initdb.d/init.sql:ro"
+    expose:
+      - "5432"
+    restart: unless-stopped
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "1.0"
+        reservations:
+          memory: 1G
+          cpus: "0.5"
+  cache:
+    image: "redis:6-alpine"
+    command: redis-server --appendonly yes
+    volumes:
+      - "redis_data:/data"
+    expose:
+      - "6379"
+    restart: unless-stopped
+    networks:
+      - backend
+    environment:
+      - REDIS_MAXMEMORY=256mb
+      - REDIS_MAXMEMORY_POLICY=allkeys-lru
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.25"
+  nginx-cache:
+    image: "nginx:1.21-alpine"
+    volumes:
+      - "./nginx-cache.conf:/etc/nginx/nginx.conf:ro"
+      - "nginx_cache:/var/cache/nginx"
+    depends_on:
+      - web
+    ports:
+      - "8081:80"
+    networks:
+      - frontend
+volumes:
+  web_data: ~
+  node_modules: ~
+  postgres_data: ~
+  redis_data: ~
+  staging_ssl_certs:
+    external: true
+  staging_ssl_keys:
+    external: true
+  nginx_cache:
+    driver: local
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge
+    internal: true

@@ -1,0 +1,123 @@
+version: '3.8'
+
+services:
+  # Production-specific overrides
+  web:
+    image: nginx:1.21-alpine
+    environment:
+      - ENVIRONMENT=production
+      - SSL_CERT_PATH=/etc/ssl/certs/production.crt
+      - SSL_KEY_PATH=/etc/ssl/private/production.key
+    volumes:
+      - ./nginx-production.conf:/etc/nginx/nginx.conf:ro
+      - production_ssl_certs:/etc/ssl/certs:ro
+      - production_ssl_keys:/etc/ssl/private:ro
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+      restart_policy:
+        condition: on-failure
+        max_attempts: 3
+
+  app:
+    environment:
+      - NODE_ENV=production
+      - API_BASE_URL=https://api.example.com
+      - ENABLE_CLUSTERING=true
+      - MAX_WORKERS=4
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+      restart_policy:
+        condition: on-failure
+        max_attempts: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+
+  database:
+    image: postgres:13-alpine
+    environment:
+      - POSTGRES_DB=appdb_production
+      - POSTGRES_USER=produser
+      - POSTGRES_PASSWORD=${PRODUCTION_DB_PASSWORD}
+      - POSTGRES_SHARED_PRELOAD_LIBRARIES=pg_stat_statements
+    volumes:
+      - production_postgres_data:/var/lib/postgresql/data
+      - ./postgresql.conf:/etc/postgresql/postgresql.conf:ro
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+        reservations:
+          memory: 2G
+          cpus: '1.0'
+      restart_policy:
+        condition: on-failure
+        max_attempts: 3
+
+  cache:
+    image: redis:6-alpine
+    environment:
+      - REDIS_MAXMEMORY=1gb
+      - REDIS_MAXMEMORY_POLICY=allkeys-lru
+    command: redis-server --appendonly yes --maxmemory 1gb --maxmemory-policy allkeys-lru
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          memory: 1.5G
+          cpus: '0.5'
+        reservations:
+          memory: 1G
+          cpus: '0.25'
+
+  # Production load balancer
+  load-balancer:
+    image: haproxy:2.4-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8404:8404" # HAProxy stats
+    volumes:
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - production_ssl_certs:/etc/ssl/certs:ro
+      - production_ssl_keys:/etc/ssl/private:ro
+    depends_on:
+      - web
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+    networks:
+      - frontend
+
+volumes:
+  production_postgres_data:
+    external: true
+  production_ssl_certs:
+    external: true
+  production_ssl_keys:
+    external: true
+
+networks:
+  frontend:
+    external: true
+  backend:
+    external: true

@@ -1,0 +1,140 @@
+---
+version: "3.8"
+services:
+  api:
+    image: "node:18-alpine"
+    working_dir: /app
+    volumes:
+      - "./app:/app"
+      - "api_modules:/app/node_modules"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - NODE_ENV=testing
+      - "API_URL=https://qa-api.example.com"
+      - ENABLE_TESTING=true
+      - LOG_LEVEL=debug
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    networks:
+      - app-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+  db:
+    image: "mysql:8.0"
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootpassword
+      - MYSQL_DATABASE=appdb
+      - MYSQL_USER=appuser
+      - MYSQL_PASSWORD=apppassword
+      - MYSQL_ROOT_PASSWORD=qaroot
+      - MYSQL_DATABASE=appdb_qa
+      - MYSQL_USER=qauser
+      - MYSQL_PASSWORD=qapass
+    volumes:
+      - "db_data:/var/lib/mysql"
+    ports:
+      - "3306:3306"
+    restart: unless-stopped
+    networks:
+      - app-network
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "0.5"
+  selenium-hub:
+    image: "selenium/hub:4.11.0"
+    ports:
+      - "4444:4444"
+    environment:
+      - GRID_MAX_SESSION=4
+      - GRID_BROWSER_TIMEOUT=30
+      - GRID_TIMEOUT=30
+    networks:
+      - app-network
+  selenium-chrome:
+    image: "selenium/node-chrome:4.11.0"
+    depends_on:
+      - selenium-hub
+    environment:
+      - HUB_HOST=selenium-hub
+      - HUB_PORT=4444
+      - NODE_MAX_INSTANCES=2
+      - NODE_MAX_SESSION=2
+    volumes:
+      - "/dev/shm:/dev/shm"
+    networks:
+      - app-network
+  test-runner:
+    image: "node:18-alpine"
+    working_dir: /tests
+    volumes:
+      - "./tests:/tests"
+      - "test_reports:/tests/reports"
+    environment:
+      - "SELENIUM_HUB=http://selenium-hub:4444"
+      - "API_BASE_URL=http://api:3000"
+    command: "sh -c \"\n  npm install\n  npm run test:e2e\n\"\n"
+    depends_on:
+      - api
+      - selenium-hub
+    networks:
+      - app-network
+  redis:
+    image: "redis:7-alpine"
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - "redis_data:/data"
+      - "./redis.conf:/usr/local/etc/redis/redis.conf:ro"
+    networks:
+      - app-network
+    restart: unless-stopped
+  redis-insight:
+    image: "redislabs/redisinsight:latest"
+    ports:
+      - "8001:8001"
+    volumes:
+      - "redis_insight_data:/db"
+    depends_on:
+      - redis
+    networks:
+      - app-network
+    restart: unless-stopped
+  memcached:
+    image: "memcached:1.6-alpine"
+    command: memcached -m 64 -p 11211 -u memcache -l 0.0.0.0
+    ports:
+      - "11211:11211"
+    networks:
+      - app-network
+    restart: unless-stopped
+  cache-warmer:
+    image: "alpine:3.17"
+    command: "sh -c \"\n  apk add --no-cache curl redis\n  while true; do\n    echo 'Warming up cache...'\n    curl -f http://api:3000/api/warm-cache || echo 'Cache warm failed'\n    redis-cli -h redis PING\n    sleep 300\n  done\n\"\n"
+    depends_on:
+      - redis
+      - api
+    networks:
+      - app-network
+    restart: unless-stopped
+volumes:
+  api_modules:
+    driver: local
+  db_data:
+    driver: local
+  test_reports:
+    driver: local
+  redis_data:
+    driver: local
+  redis_insight_data:
+    driver: local
+networks:
+  app-network:
+    driver: bridge

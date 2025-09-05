@@ -1,0 +1,204 @@
+---
+version: "3.8"
+services:
+  api:
+    image: "node:18-alpine"
+    working_dir: /app
+    volumes:
+      - "./app:/app"
+      - "api_modules:/app/node_modules"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - NODE_ENV=testing
+      - "API_URL=https://qa-api.example.com"
+      - ENABLE_TESTING=true
+      - LOG_LEVEL=debug
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    networks:
+      - app-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+  db:
+    image: "mysql:8.0"
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootpassword
+      - MYSQL_DATABASE=appdb
+      - MYSQL_USER=appuser
+      - MYSQL_PASSWORD=apppassword
+      - MYSQL_ROOT_PASSWORD=qaroot
+      - MYSQL_DATABASE=appdb_qa
+      - MYSQL_USER=qauser
+      - MYSQL_PASSWORD=qapass
+    volumes:
+      - "db_data:/var/lib/mysql"
+    ports:
+      - "3306:3306"
+    restart: unless-stopped
+    networks:
+      - app-network
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "0.5"
+  selenium-hub:
+    image: "selenium/hub:4.11.0"
+    ports:
+      - "4444:4444"
+    environment:
+      - GRID_MAX_SESSION=4
+      - GRID_BROWSER_TIMEOUT=30
+      - GRID_TIMEOUT=30
+    networks:
+      - app-network
+  selenium-chrome:
+    image: "selenium/node-chrome:4.11.0"
+    depends_on:
+      - selenium-hub
+    environment:
+      - HUB_HOST=selenium-hub
+      - HUB_PORT=4444
+      - NODE_MAX_INSTANCES=2
+      - NODE_MAX_SESSION=2
+    volumes:
+      - "/dev/shm:/dev/shm"
+    networks:
+      - app-network
+  test-runner:
+    image: "node:18-alpine"
+    working_dir: /tests
+    volumes:
+      - "./tests:/tests"
+      - "test_reports:/tests/reports"
+    environment:
+      - "SELENIUM_HUB=http://selenium-hub:4444"
+      - "API_BASE_URL=http://api:3000"
+    command: "sh -c \"\n  npm install\n  npm run test:e2e\n\"\n"
+    depends_on:
+      - api
+      - selenium-hub
+    networks:
+      - app-network
+  fail2ban:
+    image: "crazymax/fail2ban:latest"
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    environment:
+      - TZ=UTC
+      - F2B_LOG_LEVEL=INFO
+    volumes:
+      - "./fail2ban/jail.local:/etc/fail2ban/jail.local:ro"
+      - "./fail2ban/filter.d:/etc/fail2ban/filter.d:ro"
+      - "fail2ban_data:/data"
+      - "/var/log:/var/log:ro"
+    ports:
+      - "22:22"
+    networks:
+      - app-network
+    restart: unless-stopped
+  modsecurity:
+    image: "owasp/modsecurity:3.0-apache"
+    ports:
+      - "8443:443"
+      - "8090:80"
+    volumes:
+      - "./modsecurity/modsecurity.conf:/etc/modsecurity/modsecurity.conf:ro"
+      - "./modsecurity/main.conf:/etc/apache2/sites-available/000-default.conf:ro"
+      - "modsecurity_logs:/var/log/apache2"
+    environment:
+      - PARANOIA=1
+      - ANOMALY_INBOUND=5
+      - ANOMALY_OUTBOUND=4
+      - "BACKEND=http://api:3000"
+    depends_on:
+      - api
+    networks:
+      - app-network
+    restart: unless-stopped
+  clamav:
+    image: "clamav/clamav:stable"
+    volumes:
+      - "clamav_data:/var/lib/clamav"
+      - "scan_quarantine:/quarantine"
+    environment:
+      - CLAMAV_NO_FRESHCLAMD=false
+      - CLAMAV_NO_CLAMD=false
+    ports:
+      - "3310:3310"
+    networks:
+      - app-network
+    restart: unless-stopped
+  security-scanner:
+    image: "alpine:3.17"
+    command: "sh -c \"\n  apk add --no-cache curl nmap openssl\n  while true; do\n    echo 'Running security scan...'\n    nmap -sS -O api 2>/dev/null || echo 'Port scan completed'\n    curl -k -I https://modsecurity:8443 || echo 'SSL check completed'\n    sleep 3600\n  done\n\"\n"
+    depends_on:
+      - api
+      - modsecurity
+    volumes:
+      - "security_reports:/reports"
+    networks:
+      - app-network
+    restart: unless-stopped
+  ossec:
+    image: "atomicorp/ossec-docker:latest"
+    volumes:
+      - "ossec_data:/var/ossec/data"
+      - "ossec_logs:/var/ossec/logs"
+      - "./ossec/ossec.conf:/var/ossec/etc/ossec.conf:ro"
+      - "/var/log:/host/var/log:ro"
+    ports:
+      - "1514:1514/udp"
+      - "1515:1515"
+    environment:
+      - OSSEC_INIT=true
+    networks:
+      - app-network
+    restart: unless-stopped
+  vault-security:
+    image: "vault:1.12.0"
+    cap_add:
+      - IPC_LOCK
+    environment:
+      - VAULT_DEV_ROOT_TOKEN_ID=security-token
+      - "VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200"
+    ports:
+      - "8201:8200"
+    volumes:
+      - "vault_security_data:/vault/data"
+      - "./vault/security-config:/vault/config:ro"
+    networks:
+      - app-network
+    restart: unless-stopped
+volumes:
+  api_modules:
+    driver: local
+  db_data:
+    driver: local
+  test_reports:
+    driver: local
+  fail2ban_data:
+    driver: local
+  modsecurity_logs:
+    driver: local
+  clamav_data:
+    driver: local
+  scan_quarantine:
+    driver: local
+  security_reports:
+    driver: local
+  ossec_data:
+    driver: local
+  ossec_logs:
+    driver: local
+  vault_security_data:
+    driver: local
+networks:
+  app-network:
+    driver: bridge

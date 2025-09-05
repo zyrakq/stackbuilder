@@ -1,0 +1,110 @@
+---
+version: "3.8"
+services:
+  api:
+    image: "node:18-alpine"
+    working_dir: /app
+    volumes:
+      - "./app:/app"
+      - "api_modules:/app/node_modules"
+      - "./app:/app:cached"
+      - "./logs:/app/logs"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - NODE_ENV=development
+      - DEBUG=*
+      - "API_URL=http://localhost:3000"
+    ports:
+      - "3000:3000"
+      - "3000:3000"
+      - "9229:9229"
+    restart: unless-stopped
+    networks:
+      - app-network
+    command: npm run dev
+  db:
+    image: "mysql:8.0"
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootpassword
+      - MYSQL_DATABASE=appdb
+      - MYSQL_USER=appuser
+      - MYSQL_PASSWORD=apppassword
+      - MYSQL_ROOT_PASSWORD=devroot
+      - MYSQL_DATABASE=appdb_dev
+      - MYSQL_USER=devuser
+      - MYSQL_PASSWORD=devpass
+    volumes:
+      - "db_data:/var/lib/mysql"
+    ports:
+      - "3306:3306"
+      - "3306:3306"
+    restart: unless-stopped
+    networks:
+      - app-network
+    command: "--general-log=1 --general-log-file=/var/lib/mysql/general.log"
+  phpmyadmin:
+    image: "phpmyadmin/phpmyadmin:latest"
+    environment:
+      - PMA_HOST=db
+      - PMA_USER=devuser
+      - PMA_PASSWORD=devpass
+    ports:
+      - "8080:80"
+    depends_on:
+      - db
+    networks:
+      - app-network
+  redis:
+    image: "redis:7-alpine"
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - "redis_data:/data"
+      - "./redis.conf:/usr/local/etc/redis/redis.conf:ro"
+    networks:
+      - app-network
+    restart: unless-stopped
+  redis-insight:
+    image: "redislabs/redisinsight:latest"
+    ports:
+      - "8001:8001"
+    volumes:
+      - "redis_insight_data:/db"
+    depends_on:
+      - redis
+    networks:
+      - app-network
+    restart: unless-stopped
+  memcached:
+    image: "memcached:1.6-alpine"
+    command: memcached -m 64 -p 11211 -u memcache -l 0.0.0.0
+    ports:
+      - "11211:11211"
+    networks:
+      - app-network
+    restart: unless-stopped
+  cache-warmer:
+    image: "alpine:3.17"
+    command: "sh -c \"\n  apk add --no-cache curl redis\n  while true; do\n    echo 'Warming up cache...'\n    curl -f http://api:3000/api/warm-cache || echo 'Cache warm failed'\n    redis-cli -h redis PING\n    sleep 300\n  done\n\"\n"
+    depends_on:
+      - redis
+      - api
+    networks:
+      - app-network
+    restart: unless-stopped
+volumes:
+  api_modules:
+    driver: local
+  db_data:
+    driver: local
+  dev_logs:
+    driver: local
+  redis_data:
+    driver: local
+  redis_insight_data:
+    driver: local
+networks:
+  app-network:
+    driver: bridge

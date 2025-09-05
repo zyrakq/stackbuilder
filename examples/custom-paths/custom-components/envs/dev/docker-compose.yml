@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  # Development overrides
+  api:
+    environment:
+      - NODE_ENV=development
+      - DEBUG=*
+      - API_URL=http://localhost:3000
+    volumes:
+      - ./app:/app:cached
+      - ./logs:/app/logs
+    command: npm run dev
+    ports:
+      - "3000:3000"
+      - "9229:9229" # Debug port
+
+  db:
+    environment:
+      - MYSQL_ROOT_PASSWORD=devroot
+      - MYSQL_DATABASE=appdb_dev
+      - MYSQL_USER=devuser
+      - MYSQL_PASSWORD=devpass
+    ports:
+      - "3306:3306"
+    command: --general-log=1 --general-log-file=/var/lib/mysql/general.log
+
+  # Development-only services
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin:latest
+    environment:
+      - PMA_HOST=db
+      - PMA_USER=devuser
+      - PMA_PASSWORD=devpass
+    ports:
+      - "8080:80"
+    depends_on:
+      - db
+    networks:
+      - app-network
+
+volumes:
+  dev_logs:
+    driver: local

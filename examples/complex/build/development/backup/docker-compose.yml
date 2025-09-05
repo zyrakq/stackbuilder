@@ -1,0 +1,227 @@
+---
+version: "3.8"
+services:
+  web:
+    image: "nginx:1.21-alpine"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:80"
+    volumes:
+      - "./nginx.conf:/etc/nginx/nginx.conf:ro"
+      - "web_data:/var/www/html"
+      - "./nginx-dev.conf:/etc/nginx/nginx.conf:ro"
+    depends_on:
+      - app
+    restart: unless-stopped
+    networks:
+      - frontend
+      - backend
+    environment:
+      - DEBUG=true
+  app:
+    image: "node:16-alpine"
+    working_dir: /app
+    volumes:
+      - "./app:/app"
+      - "node_modules:/app/node_modules"
+      - "./app:/app"
+      - "./app/src:/app/src:cached"
+      - "node_modules:/app/node_modules"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - NODE_ENV=development
+      - DEBUG=*
+      - HOT_RELOAD=true
+    expose:
+      - "3000"
+    depends_on:
+      - database
+      - cache
+    restart: unless-stopped
+    networks:
+      - backend
+    command: npm run dev
+    ports:
+      - "3000:3000"
+  database:
+    image: "postgres:13-alpine"
+    environment:
+      - POSTGRES_DB=appdb
+      - POSTGRES_USER=appuser
+      - POSTGRES_PASSWORD=secure_password
+      - POSTGRES_DB=appdb_dev
+      - POSTGRES_USER=devuser
+      - POSTGRES_PASSWORD=devpass
+    volumes:
+      - "postgres_data:/var/lib/postgresql/data"
+      - "./init.sql:/docker-entrypoint-initdb.d/init.sql:ro"
+    expose:
+      - "5432"
+    restart: unless-stopped
+    networks:
+      - backend
+    ports:
+      - "5432:5432"
+  cache:
+    image: "redis:6-alpine"
+    command: redis-server --appendonly yes
+    volumes:
+      - "redis_data:/data"
+    expose:
+      - "6379"
+    restart: unless-stopped
+    networks:
+      - backend
+    ports:
+      - "6379:6379"
+  mailhog:
+    image: "mailhog/mailhog:latest"
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks:
+      - backend
+  postgres-backup:
+    image: "prodrigestivill/postgres-backup-local:14"
+    environment:
+      - POSTGRES_HOST=database
+      - "POSTGRES_DB=appdb,keycloak"
+      - "POSTGRES_USER=${POSTGRES_BACKUP_USER:-backup_user}"
+      - "POSTGRES_PASSWORD=${POSTGRES_BACKUP_PASSWORD:-backup_pass}"
+      - POSTGRES_EXTRA_OPTS=-Z6 --schema=public --blobs
+      - SCHEDULE=@daily
+      - BACKUP_KEEP_DAYS=7
+      - BACKUP_KEEP_WEEKS=4
+      - BACKUP_KEEP_MONTHS=6
+      - HEALTHCHECK_PORT=8080
+    volumes:
+      - "postgres_backups:/backups"
+      - "./postgres-backup/scripts:/scripts:ro"
+    depends_on:
+      - database
+    networks:
+      - backup
+      - backend
+    restart: unless-stopped
+  redis-backup:
+    image: "redis:6-alpine"
+    command: "sh -c \"\n  while true; do\n    echo 'Starting Redis backup...'\n    redis-cli -h cache BGSAVE\n    sleep 10\n    redis-cli -h cache SAVE\n    cp /data/dump.rdb /backups/redis-backup-$$(date +%Y%m%d_%H%M%S).rdb\n    find /backups -name 'redis-backup-*.rdb' -mtime +7 -delete\n    echo 'Redis backup completed'\n    sleep 86400\n  done\n\"\n"
+    volumes:
+      - "redis_backups:/backups"
+      - "redis_data:/data:ro"
+    depends_on:
+      - cache
+    networks:
+      - backup
+      - backend
+    restart: unless-stopped
+  restic-backup:
+    image: "restic/restic:0.14.0"
+    environment:
+      - RESTIC_REPOSITORY=/backups/restic-repo
+      - "RESTIC_PASSWORD=${RESTIC_PASSWORD:-restic123}"
+      - BACKUP_SCHEDULE=0 2 * * *
+    volumes:
+      - "restic_backups:/backups"
+      - "web_data:/data/web:ro"
+      - "postgres_data:/data/postgres:ro"
+      - "redis_data:/data/redis:ro"
+      - "./restic/scripts:/scripts:ro"
+    command: "sh -c \"\n  restic init --repo /backups/restic-repo || true\n  while true; do\n    echo 'Starting restic backup...'\n    restic backup /data --repo /backups/restic-repo --tag automated\n    restic forget --repo /backups/restic-repo --keep-daily 7 --keep-weekly 4 --keep-monthly 12 --prune\n    echo 'Restic backup completed'\n    sleep 86400\n  done\n\"\n"
+    networks:
+      - backup
+    restart: unless-stopped
+  minio:
+    image: "quay.io/minio/minio:RELEASE.2022-11-17T23-20-09Z"
+    command: "server /data --console-address \":9001\""
+    environment:
+      - "MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}"
+      - "MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minioadmin123}"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - "minio_data:/data"
+      - "./minio/policies:/policies:ro"
+    networks:
+      - backup
+      - frontend
+    restart: unless-stopped
+  minio-backup:
+    image: "minio/mc:RELEASE.2022-11-17T21-20-39Z"
+    environment:
+      - "MC_HOST_minio=http://${MINIO_ROOT_USER:-minioadmin}:${MINIO_ROOT_PASSWORD:-minioadmin123}@minio:9000"
+    volumes:
+      - "postgres_backups:/source/postgres:ro"
+      - "redis_backups:/source/redis:ro"
+      - "restic_backups:/source/restic:ro"
+      - "./minio-backup/scripts:/scripts:ro"
+    command: "sh -c \"\n  while ! mc admin info minio; do\n    echo 'Waiting for MinIO...'\n    sleep 5\n  done\n  mc mb minio/backups || true\n  mc policy set download minio/backups\n  while true; do\n    echo 'Syncing backups to MinIO...'\n    mc mirror /source/postgres minio/backups/postgres/\n    mc mirror /source/redis minio/backups/redis/\n    mc mirror /source/restic minio/backups/restic/\n    echo 'Backup sync completed'\n    sleep 3600\n  done\n\"\n"
+    depends_on:
+      - minio
+      - postgres-backup
+      - redis-backup
+      - restic-backup
+    networks:
+      - backup
+    restart: unless-stopped
+  backup-monitor:
+    image: "prom/blackbox-exporter:v0.22.0"
+    volumes:
+      - "./backup-monitor/blackbox.yml:/etc/blackbox_exporter/config.yml:ro"
+    ports:
+      - "9116:9115"
+    networks:
+      - backup
+      - monitoring
+    restart: unless-stopped
+  backup-cleaner:
+    image: "alpine:3.17"
+    command: "sh -c \"\n  apk add --no-cache findutils\n  while true; do\n    echo 'Starting backup cleanup...'\n    find /backups/postgres -name '*.sql' -mtime +30 -delete\n    find /backups/redis -name '*.rdb' -mtime +14 -delete\n    find /backups/restic -name '*.log' -mtime +7 -delete\n    echo 'Backup cleanup completed'\n    sleep 86400\n  done\n\"\n"
+    volumes:
+      - "postgres_backups:/backups/postgres"
+      - "redis_backups:/backups/redis"
+      - "restic_backups:/backups/restic"
+    networks:
+      - backup
+    restart: unless-stopped
+  backup-verify:
+    image: "postgres:13-alpine"
+    environment:
+      - POSTGRES_HOST=database
+      - "POSTGRES_USER=${POSTGRES_BACKUP_USER:-backup_user}"
+      - "POSTGRES_PASSWORD=${POSTGRES_BACKUP_PASSWORD:-backup_pass}"
+    volumes:
+      - "postgres_backups:/backups:ro"
+      - "./backup-verify/scripts:/scripts:ro"
+    command: "sh -c \"\n  while true; do\n    echo 'Starting backup verification...'\n    /scripts/verify-postgres-backup.sh\n    echo 'Backup verification completed'\n    sleep 86400\n  done\n\"\n"
+    depends_on:
+      - postgres-backup
+    networks:
+      - backup
+      - backend
+    restart: unless-stopped
+volumes:
+  web_data: ~
+  node_modules:
+    driver: local
+  postgres_data: ~
+  redis_data: ~
+  postgres_backups:
+    driver: local
+  redis_backups:
+    driver: local
+  restic_backups:
+    driver: local
+  minio_data:
+    driver: local
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge
+    internal: true
+  backup:
+    driver: bridge

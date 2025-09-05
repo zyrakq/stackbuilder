@@ -1,0 +1,67 @@
+---
+version: "3.8"
+services:
+  api:
+    image: "node:18-alpine"
+    working_dir: /app
+    volumes:
+      - "./app:/app"
+      - "api_modules:/app/node_modules"
+      - "./app:/app:cached"
+      - "./logs:/app/logs"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - NODE_ENV=development
+      - DEBUG=*
+      - "API_URL=http://localhost:3000"
+    ports:
+      - "3000:3000"
+      - "3000:3000"
+      - "9229:9229"
+    restart: unless-stopped
+    networks:
+      - app-network
+    command: npm run dev
+  db:
+    image: "mysql:8.0"
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootpassword
+      - MYSQL_DATABASE=appdb
+      - MYSQL_USER=appuser
+      - MYSQL_PASSWORD=apppassword
+      - MYSQL_ROOT_PASSWORD=devroot
+      - MYSQL_DATABASE=appdb_dev
+      - MYSQL_USER=devuser
+      - MYSQL_PASSWORD=devpass
+    volumes:
+      - "db_data:/var/lib/mysql"
+    ports:
+      - "3306:3306"
+      - "3306:3306"
+    restart: unless-stopped
+    networks:
+      - app-network
+    command: "--general-log=1 --general-log-file=/var/lib/mysql/general.log"
+  phpmyadmin:
+    image: "phpmyadmin/phpmyadmin:latest"
+    environment:
+      - PMA_HOST=db
+      - PMA_USER=devuser
+      - PMA_PASSWORD=devpass
+    ports:
+      - "8080:80"
+    depends_on:
+      - db
+    networks:
+      - app-network
+volumes:
+  api_modules:
+    driver: local
+  db_data:
+    driver: local
+  dev_logs:
+    driver: local
+networks:
+  app-network:
+    driver: bridge

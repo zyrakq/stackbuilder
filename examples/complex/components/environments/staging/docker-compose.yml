@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  # Staging-specific overrides
+  web:
+    environment:
+      - ENVIRONMENT=staging
+      - SSL_CERT_PATH=/etc/ssl/certs/staging.crt
+      - SSL_KEY_PATH=/etc/ssl/private/staging.key
+    volumes:
+      - ./nginx-staging.conf:/etc/nginx/nginx.conf:ro
+      - staging_ssl_certs:/etc/ssl/certs:ro
+      - staging_ssl_keys:/etc/ssl/private:ro
+
+  app:
+    environment:
+      - NODE_ENV=staging
+      - API_BASE_URL=https://api-staging.example.com
+      - ENABLE_PROFILING=true
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+        reservations:
+          memory: 512M
+          cpus: '0.25'
+
+  database:
+    environment:
+      - POSTGRES_DB=appdb_staging
+      - POSTGRES_USER=staginguser
+      - POSTGRES_PASSWORD=${STAGING_DB_PASSWORD}
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+
+  cache:
+    environment:
+      - REDIS_MAXMEMORY=256mb
+      - REDIS_MAXMEMORY_POLICY=allkeys-lru
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.25'
+
+  # Staging-specific services
+  nginx-cache:
+    image: nginx:1.21-alpine
+    volumes:
+      - ./nginx-cache.conf:/etc/nginx/nginx.conf:ro
+      - nginx_cache:/var/cache/nginx
+    depends_on:
+      - web
+    ports:
+      - "8081:80"
+    networks:
+      - frontend
+
+volumes:
+  staging_ssl_certs:
+    external: true
+  staging_ssl_keys:
+    external: true
+  nginx_cache:
+    driver: local
