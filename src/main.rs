@@ -1,3 +1,4 @@
+mod merger;
 use clap::{Parser, Subcommand};
 mod config;
 mod init;
@@ -40,7 +41,46 @@ fn run_build() -> anyhow::Result<()> {
 
     println!("Build preparation complete. Ready to build docker-compose files.");
 
-    // TODO: Add actual build logic here
+    // Test the merger functionality
+fn test_merger(config: &config::Config) -> anyhow::Result<()> {
+    use merger::{ComposeMerger, merge_compose_files, merge_yaml_values, load_compose_file};
+
+    println!("Testing merger functionality...");
+
+    // Test 1: Basic base merge
+    let base_file = "components/base/docker-compose.yml";
+    let base_value = load_compose_file(base_file)?;
+    println!("✓ Loaded base file: {}", base_file);
+
+    // Test 2: Base + Environment merge
+    let merger = ComposeMerger::new(
+        "components/base".to_string(),
+        "components/environments".to_string(),
+        vec!["components/extensions".to_string()],
+    );
+
+    let result_env = merge_compose_files(&merger, Some("dev"), &[])?;
+    println!("✓ Merged base + environment dev");
+
+    // Test 3: Base + Extensions merge
+    let result_ext = merge_compose_files(&merger, None, &["monitoring".to_string()])?;
+    println!("✓ Merged base + monitoring extension");
+
+    // Test 4: Full merge: Base + Environment + Extensions
+    let result_full = merge_compose_files(&merger, Some("dev"), &["monitoring".to_string(), "security".to_string()])?;
+    println!("✓ Merged base + dev + monitoring + security");
+
+    // Print key parts of the full result to verify overrides
+    if let Some(services) = result_full.get("services") {
+        println!("Services in final merge:");
+        for (service_name, service_config) in services.as_mapping().unwrap() {
+            println!("  - {}", service_name.as_str().unwrap());
+        }
+    }
+
+    Ok(())
+}
+    test_merger(&config)?;
 
     Ok(())
 }
