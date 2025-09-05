@@ -44,12 +44,26 @@ impl Default for Paths {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug, Default)]
+#[derive(Deserialize, Serialize, Debug)]
 pub struct Build {
     pub environments: Option<Vec<String>>,
     pub extensions: Option<Vec<String>>,
     pub combos: Option<Vec<String>>,
     pub environment: Option<Vec<EnvironmentConfig>>,
+    #[serde(default = "default_copy_env_example")]
+    pub copy_env_example: bool,
+}
+
+impl Default for Build {
+    fn default() -> Self {
+        Build {
+            environments: None,
+            extensions: None,
+            combos: None,
+            environment: None,
+            copy_env_example: default_copy_env_example(),
+        }
+    }
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -77,6 +91,10 @@ fn default_extensions_dirs() -> Vec<String> {
 
 fn default_build_dir() -> String {
     "./build".to_string()
+}
+
+fn default_copy_env_example() -> bool {
+    true
 }
 
 // Load and parse stackbuilder.toml configuration file

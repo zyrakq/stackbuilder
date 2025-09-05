@@ -4,12 +4,14 @@ use yaml_rust::{YamlEmitter, YamlLoader};
 
 use crate::config;
 use crate::merger::{ComposeMerger, merge_compose_files};
+use crate::env_merger::{EnvMerger, merge_env_files, write_merged_env};
 use crate::error::{Result, BuildError, FileSystemError, YamlError};
 
 /// Structure for managing build process execution
 pub struct BuildExecutor {
     pub config: config::Config,
     pub merger: ComposeMerger,
+    pub env_merger: EnvMerger,
     pub num_envs: usize,
     pub num_extensions: usize,
 }
@@ -27,10 +29,16 @@ impl BuildExecutor {
             config.paths.extensions_dirs.clone(),
         );
 
+        let env_merger = EnvMerger::new(
+            config.paths.base_dir.clone(),
+            config.paths.environments_dir.clone(),
+            config.paths.extensions_dirs.clone(),
+        );
+
         let num_envs = config.build.environments.as_ref().map_or(0, |e| e.len());
         let num_extensions = config.build.extensions.as_ref().map_or(0, |e| e.len());
 
-        Ok(Self { config, merger, num_envs, num_extensions })
+        Ok(Self { config, merger, env_merger, num_envs, num_extensions })
     }
 }
 
@@ -260,6 +268,27 @@ fn create_build_structure(executor: &BuildExecutor, combinations: &[BuildCombina
                 source: e,
             })?;
         println!("✓ Created {}", compose_path.display());
+
+        // Process .env.example files if enabled
+        if executor.config.build.copy_env_example {
+            let env_file_path = output_path.join(".env.example");
+            let environment_opt = combo.environment.as_ref().map(|s| s.as_str());
+            
+            match merge_env_files(&executor.env_merger, environment_opt, &combo.extensions) {
+                Ok(merged_env) => {
+                    if !merged_env.variables.is_empty() || !merged_env.header_comments.is_empty() {
+                        if let Err(e) = write_merged_env(&merged_env, &env_file_path.to_string_lossy()) {
+                            println!("Warning: Failed to write .env.example file for {}: {}", combo.output_dir, e);
+                        }
+                    } else {
+                        println!("No .env.example variables found for combination: {}", combo.output_dir);
+                    }
+                }
+                Err(e) => {
+                    println!("Warning: Failed to merge .env.example files for {}: {}", combo.output_dir, e);
+                }
+            }
+        }
     }
 
     Ok(())
