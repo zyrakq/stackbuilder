@@ -238,7 +238,7 @@ METRICS_ENABLED=true
 METRICS_PORT=9090
 ```
 
-### Configuration Examples
+### .env.example Configuration Examples
 
 #### Enable .env.example merging (default)
 

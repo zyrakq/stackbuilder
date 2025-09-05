@@ -1,7 +1,6 @@
-use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
-use serde_yaml::{Mapping, Value};
+use serde_yaml::Value;
 use crate::error::{Result, YamlError, FileSystemError};
 
 /// Structure for managing docker-compose file merging process
@@ -35,7 +34,7 @@ pub fn load_compose_file(file_path: &str) -> Result<Value> {
 
     // Validate basic docker-compose structure
     if let Value::Mapping(ref map) = yaml_value {
-        if !map.contains_key(&Value::String("services".to_string())) {
+        if !map.contains_key(Value::String("services".to_string())) {
             return Err(YamlError::InvalidComposeFormat {
                 file: file_path.to_string(),
                 details: "Missing required 'services' section in docker-compose file".to_string(),

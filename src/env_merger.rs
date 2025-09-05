@@ -27,16 +27,14 @@ pub struct EnvFile {
     pub variables: BTreeMap<String, String>,
     pub variable_comments: BTreeMap<String, Vec<String>>, // Comments for each variable
     pub header_comments: Vec<String>, // General file comments
-    pub source_file: String,
 }
 
 impl EnvFile {
-    pub fn new(source_file: String) -> Self {
+    pub fn new() -> Self {
         Self {
             variables: BTreeMap::new(),
             variable_comments: BTreeMap::new(),
             header_comments: Vec::new(),
-            source_file,
         }
     }
 }
@@ -49,7 +47,7 @@ pub fn parse_env_file(file_path: &str) -> Result<EnvFile> {
             source: e,
         })?;
 
-    let mut env_file = EnvFile::new(file_path.to_string());
+    let mut env_file = EnvFile::new();
     let mut current_comments = Vec::new();
     
     for line in content.lines() {
@@ -145,10 +143,10 @@ pub fn merge_env_files(
 
     if processed_files == 0 {
         println!("Warning: No .env.example files found to merge");
-        return Ok(EnvFile::new("merged".to_string()));
+        return Ok(EnvFile::new());
     }
 
-    let mut merged_file = EnvFile::new("merged".to_string());
+    let mut merged_file = EnvFile::new();
     merged_file.variables = merged_variables;
     merged_file.variable_comments = merged_variable_comments;
     

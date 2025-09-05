@@ -1,21 +1,10 @@
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
-use toml;
 use crate::error::{Result, ConfigError, ValidationError, FileSystemError};
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Default)]
 pub struct Config {
     pub paths: Paths,
     pub build: Build,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Config {
-            paths: Paths::default(),
-            build: Build::default(),
-        }
-    }
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -136,10 +125,10 @@ pub fn validate_config(config: &Config) -> Result<()> {
     }
 
     // Check if build.targets has content, then must have environments or extensions
-    let has_environments = config.build.environments.as_ref().map_or(false, |e| !e.is_empty());
-    let has_global_extensions = config.build.extensions.as_ref().map_or(false, |e| !e.is_empty());
-    let has_per_env_extensions = config.build.environment.as_ref().map_or(false, |envs| {
-        envs.iter().any(|env| env.extensions.as_ref().map_or(false, |ext| !ext.is_empty()))
+    let has_environments = config.build.environments.as_ref().is_some_and(|e| !e.is_empty());
+    let has_global_extensions = config.build.extensions.as_ref().is_some_and(|e| !e.is_empty());
+    let has_per_env_extensions = config.build.environment.as_ref().is_some_and(|envs| {
+        envs.iter().any(|env| env.extensions.as_ref().is_some_and(|ext| !ext.is_empty()))
     });
 
     let has_targets = has_environments || has_global_extensions || has_per_env_extensions;
@@ -201,7 +190,7 @@ pub fn resolve_paths(config: &mut Config) -> Result<()> {
     config.paths.base_dir = base_path.to_string_lossy().to_string();
 
     // Only resolve environments_dir if environments are specified in build.targets
-    if config.build.environments.as_ref().map_or(false, |e| !e.is_empty()) {
+    if config.build.environments.as_ref().is_some_and(|e| !e.is_empty()) {
         let env_path = components_path.join(&config.paths.environments_dir).canonicalize()
             .map_err(|e| ValidationError::PathResolutionError {
                 path: config.paths.environments_dir.clone(),
@@ -211,7 +200,7 @@ pub fn resolve_paths(config: &mut Config) -> Result<()> {
     }
 
     // Only resolve extensions_dirs if extensions are specified in build.targets
-    if config.build.extensions.is_some() || config.build.environment.as_ref().map_or(false, |envs| {
+    if config.build.extensions.is_some() || config.build.environment.as_ref().is_some_and(|envs| {
         envs.iter().any(|env| env.extensions.is_some())
     }) {
         let mut resolved_ext_dirs = Vec::new();

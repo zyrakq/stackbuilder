@@ -71,8 +71,8 @@ pub fn execute_build() -> Result<()> {
 fn determine_build_combinations(config: &config::Config) -> Result<Vec<BuildCombination>> {
     let mut combinations = Vec::new();
 
-    let environments = config.build.environments.as_ref().map_or_else(|| vec![], |v| v.clone());
-    let extensions = config.build.extensions.as_ref().map_or_else(|| vec![], |v| v.clone());
+    let environments = config.build.environments.as_ref().map_or_else(Vec::new, |v| v.clone());
+    let extensions = config.build.extensions.as_ref().map_or_else(Vec::new, |v| v.clone());
 
     // Use individual extensions, not combinations
     let mut all_extension_combos = vec![vec![]]; // Empty combination
@@ -234,7 +234,7 @@ fn create_build_structure(executor: &BuildExecutor, combinations: &[BuildCombina
         };
 
         // Merge compose files
-        let environment_opt = combo.environment.as_ref().map(|s| s.as_str());
+        let environment_opt = combo.environment.as_deref();
         let merged = merge_compose_files(&executor.merger, environment_opt, &combo.extensions)
             .map_err(|e| BuildError::BuildProcessFailed {
                 details: format!("Failed to merge compose files for combination {:?}: {}", combo.output_dir, e),
@@ -272,7 +272,7 @@ fn create_build_structure(executor: &BuildExecutor, combinations: &[BuildCombina
         // Process .env.example files if enabled
         if executor.config.build.copy_env_example {
             let env_file_path = output_path.join(".env.example");
-            let environment_opt = combo.environment.as_ref().map(|s| s.as_str());
+            let environment_opt = combo.environment.as_deref();
             
             match merge_env_files(&executor.env_merger, environment_opt, &combo.extensions) {
                 Ok(merged_env) => {
