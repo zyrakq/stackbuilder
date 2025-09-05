@@ -2,6 +2,10 @@
 name = "stackbuilder"
 version = "0.1.0"
 edition = "2021"
+description = "A tool for building docker-compose files from modular components"
+authors = ["Stackbuilder Team <team@stackbuilder.io>"]
+license = "MIT"
+repository = "https://github.com/stackbuilder/stackbuilder"
 
 [dependencies]
 clap = { version = "4.0", features = ["derive"] }
