@@ -1,0 +1,18 @@
+{
+  "app_name": "stackbuilder-app",
+  "version": "1.0.0",
+  "database": {
+    "host": "dev-db",
+    "port": 5432,
+    "name": "app_dev_db"
+  },
+  "features": {
+    "auth": false,
+    "monitoring": true,
+    "debug": true
+  },
+  "dev_tools": {
+    "hot_reload": true,
+    "debug_mode": true
+  }
+}

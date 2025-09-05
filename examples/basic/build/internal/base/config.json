@@ -1,0 +1,13 @@
+{
+  "app_name": "stackbuilder-app",
+  "version": "1.0.0",
+  "database": {
+    "host": "localhost",
+    "port": 5432,
+    "name": "app_db"
+  },
+  "features": {
+    "auth": false,
+    "monitoring": false
+  }
+}

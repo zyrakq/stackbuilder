@@ -1,13 +1,13 @@
 use serde::{Deserialize, Serialize};
 use crate::error::{Result, ConfigError, ValidationError, FileSystemError};
 
-#[derive(Deserialize, Serialize, Debug, Default)]
+#[derive(Deserialize, Serialize, Debug, Default, Clone)]
 pub struct Config {
     pub paths: Paths,
     pub build: Build,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Paths {
     #[serde(default = "default_components_dir")]
     pub components_dir: String,
@@ -33,7 +33,7 @@ impl Default for Paths {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Build {
     pub environments: Option<Vec<String>>,
     pub extensions: Option<Vec<String>>,
@@ -41,6 +41,10 @@ pub struct Build {
     pub environment: Option<Vec<EnvironmentConfig>>,
     #[serde(default = "default_copy_env_example")]
     pub copy_env_example: bool,
+    #[serde(default = "default_copy_additional_files")]
+    pub copy_additional_files: bool,
+    #[serde(default = "default_exclude_patterns")]
+    pub exclude_patterns: Vec<String>,
 }
 
 impl Default for Build {
@@ -51,11 +55,13 @@ impl Default for Build {
             combos: None,
             environment: None,
             copy_env_example: default_copy_env_example(),
+            copy_additional_files: default_copy_additional_files(),
+            exclude_patterns: default_exclude_patterns(),
         }
     }
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct EnvironmentConfig {
     pub name: String,
     pub extensions: Option<Vec<String>>,
@@ -84,6 +90,21 @@ fn default_build_dir() -> String {
 
 fn default_copy_env_example() -> bool {
     true
+}
+
+fn default_copy_additional_files() -> bool {
+    true
+}
+
+fn default_exclude_patterns() -> Vec<String> {
+    vec![
+        "docker-compose.yml".to_string(),
+        ".env.example".to_string(),
+        "*.tmp".to_string(),
+        ".git*".to_string(),
+        "node_modules".to_string(),
+        "*.log".to_string(),
+    ]
 }
 
 // Load and parse stackbuilder.toml configuration file

@@ -5,6 +5,7 @@ use yaml_rust::{YamlEmitter, YamlLoader};
 use crate::config;
 use crate::merger::{ComposeMerger, merge_compose_files};
 use crate::env_merger::{EnvMerger, merge_env_files, write_merged_env};
+use crate::file_copier::FileCopier;
 use crate::error::{Result, BuildError, FileSystemError, YamlError};
 
 /// Structure for managing build process execution
@@ -288,6 +289,20 @@ fn create_build_structure(executor: &BuildExecutor, combinations: &[BuildCombina
                     println!("Warning: Failed to merge .env.example files for {}: {}", combo.output_dir, e);
                 }
             }
+        }
+
+        // Copy additional files if enabled
+        let file_copier = FileCopier::new(executor.config.clone())
+            .map_err(|e| BuildError::BuildProcessFailed {
+                details: format!("Failed to initialize file copier: {}", e),
+            })?;
+
+        if let Err(e) = file_copier.copy_additional_files(
+            combo.environment.as_deref(),
+            &combo.extensions,
+            &output_path,
+        ) {
+            println!("Warning: Failed to copy additional files for {}: {}", combo.output_dir, e);
         }
     }
 

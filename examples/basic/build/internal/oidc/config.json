@@ -1,0 +1,20 @@
+{
+  "app_name": "stackbuilder-app",
+  "version": "1.0.0",
+  "database": {
+    "host": "localhost",
+    "port": 5432,
+    "name": "app_db"
+  },
+  "features": {
+    "auth": true,
+    "monitoring": false,
+    "oidc": true
+  },
+  "oidc": {
+    "provider": "auth0",
+    "client_id": "${OIDC_CLIENT_ID}",
+    "client_secret": "${OIDC_CLIENT_SECRET}",
+    "discovery_url": "${OIDC_DISCOVERY_URL}"
+  }
+}

@@ -24,6 +24,8 @@ Defines the build rules and configurations.
 - `extensions` (array of strings, optional): Global list of extensions to apply to all environments. Alternative to per-environment configuration.
 - `combos` (array of strings, optional): List of extension combinations (e.g., `["oidc+guard", "monitoring+security"]`)
 - `copy_env_example` (boolean, default: `true`): Enable merging of .env.example files from components into output directories
+- `copy_additional_files` (boolean, default: `true`): Enable copying of additional files (configs, scripts, certificates) from components with priority-based overriding
+- `exclude_patterns` (array of strings, default: `["docker-compose.yml", ".env.example", "*.tmp", ".git*", "node_modules", "*.log"]`): Glob patterns for files to exclude from additional file copying
 
 #### Per-Environment Configuration
 
@@ -95,6 +97,10 @@ pub struct Build {
     pub environment: Option<Vec<EnvironmentConfig>>,
     #[serde(default = "default_copy_env_example")]
     pub copy_env_example: bool,
+    #[serde(default = "default_copy_additional_files")]
+    pub copy_additional_files: bool,
+    #[serde(default = "default_exclude_patterns")]
+    pub exclude_patterns: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -110,6 +116,17 @@ fn default_environments_dir() -> String { "environments".to_string() }
 fn default_extensions_dirs() -> Vec<String> { vec!["extensions".to_string()] }
 fn default_build_dir() -> String { "./build".to_string() }
 fn default_copy_env_example() -> bool { true }
+fn default_copy_additional_files() -> bool { true }
+fn default_exclude_patterns() -> Vec<String> {
+    vec![
+        "docker-compose.yml".to_string(),
+        ".env.example".to_string(),
+        "*.tmp".to_string(),
+        ".git*".to_string(),
+        "node_modules".to_string(),
+        "*.log".to_string(),
+    ]
+}
 ```
 
 ## Configuration Examples
@@ -254,9 +271,139 @@ extensions = ["oidc", "monitoring"]
 ```toml
 [build]
 copy_env_example = false
+
+## Additional Files Copying
+
+Stackbuilder can copy additional files (configuration files, scripts, certificates, etc.) from component directories when the `copy_additional_files` option is enabled (default: `true`).
+
+### Copy Priority and Overriding Logic
+
+Additional files are copied with priority-based overriding in the following order (higher priority overrides lower):
+
+1. **Base Priority (1)**: `base/*` - Files from base components (lowest priority)
+2. **Environment Priority (2)**: `environments/{env}/*` - Environment-specific files (medium priority)  
+3. **Extension Priority (3)**: `extensions/{ext}/*` - Extension-specific files (highest priority)
+
+### File Processing Rules
+
+- **Priority Override**: Higher priority files replace lower priority files with the same relative path
+- **Directory Structure**: Original directory structure is preserved in the output
+- **Permissions**: File permissions are preserved during copying (Unix systems)
+- **Exclusion Patterns**: Files matching `exclude_patterns` are automatically skipped
+
+### Default Exclusion Patterns
+
+```toml
+exclude_patterns = [
+    "docker-compose.yml",  # Already handled by docker-compose merging
+    ".env.example",        # Already handled by env merging
+    "*.tmp",              # Temporary files
+    ".git*",              # Git files
+    "node_modules",       # Node.js dependencies
+    "*.log"               # Log files
+]
+```
+
+### Additional Files Configuration Examples
+
+#### Enable additional file copying (default)
+
+```toml
+[build]
+copy_additional_files = true
 environments = ["dev", "prod"]
 extensions = ["oidc", "monitoring"]
 ```
+
+#### Disable additional file copying
+
+```toml
+[build]
+copy_additional_files = false
+environments = ["dev", "prod"]
+extensions = ["oidc", "monitoring"]
+```
+
+#### Custom exclusion patterns
+
+```toml
+[build]
+copy_additional_files = true
+exclude_patterns = [
+    "docker-compose.yml",
+    ".env.example", 
+    "*.tmp",
+    ".git*",
+    "node_modules",
+    "*.log",
+    "*.backup",        # Custom: exclude backup files
+    "test_*",          # Custom: exclude test files
+    "*.development"    # Custom: exclude development files
+]
+```
+
+### File Priority Examples
+
+Consider this component structure:
+
+```log
+components/
+├── base/
+│   ├── config.json          # Priority 1 (Base)
+│   └── scripts/setup.sh     # Priority 1 (Base)
+├── environments/dev/
+│   ├── config.json          # Priority 2 (Environment) - overrides base
+│   └── nginx.conf           # Priority 2 (Environment) - new file
+└── extensions/auth/
+    ├── auth.conf            # Priority 3 (Extension) - new file
+    └── config.json          # Priority 3 (Extension) - overrides all
+```
+
+**Result in build output:**
+
+- `config.json` → Contains content from `extensions/auth/config.json` (highest priority)
+- `scripts/setup.sh` → Contains content from `base/scripts/setup.sh` (only source)
+- `nginx.conf` → Contains content from `environments/dev/nginx.conf` (only source)
+- `auth.conf` → Contains content from `extensions/auth/auth.conf` (only source)
+
+### Processing Log Output
+
+During the build process, stackbuilder logs file copying operations:
+
+```log
+Copying additional files...
+  File config.json found from base (priority: Base)
+  File config.json: environment:dev overrides base (priority: Environment > Base)
+  File config.json: extension:auth overrides environment:dev (priority: Extension > Environment)
+  File scripts/setup.sh found from base (priority: Base)
+  File nginx.conf found from environment:dev (priority: Environment)
+  File auth.conf found from extension:auth (priority: Extension)
+  Copied: config.json -> ./build/dev/auth/config.json (from extension:auth)
+  Copied: scripts/setup.sh -> ./build/dev/auth/scripts/setup.sh (from base)
+  Copied: nginx.conf -> ./build/dev/auth/nginx.conf (from environment:dev)
+  Copied: auth.conf -> ./build/dev/auth/auth.conf (from extension:auth)
+Additional file copying completed
+```
+
+### File Location Guidelines
+
+Place additional files alongside `docker-compose.yml` files in component directories:
+
+- `components/base/` - Base configuration files, common scripts
+- `components/environments/{env}/` - Environment-specific configs (nginx.conf, app.conf)
+- `components/extensions/{ext}/` - Extension-specific configs (auth.conf, ssl certificates)
+
+### Usage Notes
+
+- Files are copied after docker-compose and .env merging is complete
+- Missing component directories are silently skipped (not an error)
+- Symbolic links are followed and the target files are copied
+- Binary files are supported and copied without modification
+- Large files may impact build performance - consider using exclusion patterns
+environments = ["dev", "prod"]
+extensions = ["oidc", "monitoring"]
+
+```log
 
 ### File Locations
 

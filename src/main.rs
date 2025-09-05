@@ -5,6 +5,7 @@ use clap::{Parser, Subcommand};
 mod config;
 mod init;
 mod build;
+mod file_copier;
 
 #[cfg(test)]
 mod tests;
