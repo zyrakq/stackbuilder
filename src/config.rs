@@ -125,22 +125,24 @@ pub fn validate_config(config: &Config) -> Result<(), anyhow::Error> {
         ));
     }
 
-    // Check environments_dir if specified
+    // Check environments_dir if specified and not empty
     if let Some(ref envs) = config.build.environments {
-        let envs_path = components_path.join(&config.paths.environments_dir);
-        if !envs_path.exists() {
-            return Err(anyhow::anyhow!(
-                "Environments directory '{}' does not exist",
-                envs_path.display()
-            ));
-        }
-        for env in envs {
-            let env_path = envs_path.join(env);
-            if !env_path.exists() {
+        if !envs.is_empty() {
+            let envs_path = components_path.join(&config.paths.environments_dir);
+            if !envs_path.exists() {
                 return Err(anyhow::anyhow!(
-                    "Environment '{}' does not exist in environments_dir",
-                    env
+                    "Environments directory '{}' does not exist",
+                    envs_path.display()
                 ));
+            }
+            for env in envs {
+                let env_path = envs_path.join(env);
+                if !env_path.exists() {
+                    return Err(anyhow::anyhow!(
+                        "Environment '{}' does not exist in environments_dir",
+                        env
+                    ));
+                }
             }
         }
     }
@@ -175,7 +177,7 @@ pub fn resolve_paths(config: &mut Config) -> Result<(), anyhow::Error> {
     config.paths.base_dir = base_path.to_string_lossy().to_string();
 
     // Only resolve environments_dir if environments are specified in build.targets
-    if config.build.environments.is_some() {
+    if config.build.environments.as_ref().map_or(false, |e| !e.is_empty()) {
         let env_path = components_path.join(&config.paths.environments_dir).canonicalize()
             .map_err(|e| anyhow::anyhow!("Failed to resolve environments_dir: {}", e))?;
         config.paths.environments_dir = env_path.to_string_lossy().to_string();
@@ -194,9 +196,9 @@ pub fn resolve_paths(config: &mut Config) -> Result<(), anyhow::Error> {
         config.paths.extensions_dirs = resolved_ext_dirs;
     }
 
-    let build_path = std::path::Path::new(&config.paths.build_dir).canonicalize()
-        .map_err(|e| anyhow::anyhow!("Failed to resolve build_dir: {}", e))?;
-    config.paths.build_dir = build_path.to_string_lossy().to_string();
+    // Build dir will be created during build process, resolve to absolute path without requiring existence
+    let build_path = std::path::Path::new(&config.paths.build_dir);
+    config.paths.build_dir = build_path.canonicalize().unwrap_or_else(|_| build_path.to_path_buf()).to_string_lossy().to_string();
 
     println!("Paths resolved successfully");
     Ok(())

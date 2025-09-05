@@ -1,0 +1,67 @@
+---
+version: "3.8"
+services:
+  web:
+    image: "nginx:alpine"
+    ports:
+      - "8080:80"
+      - "80:80"
+    volumes:
+      - "./nginx.conf:/etc/nginx/nginx.conf:ro"
+    depends_on:
+      - app
+    environment:
+      - NODE_ENV=production
+      - INTERNAL=true
+      - GUARD_ENABLED=true
+      - SECURITY_HEADERS=true
+    networks:
+      - internal
+      - backend
+  app:
+    image: "python:3.9-slim"
+    command: python -m http.server 8000
+    ports:
+      - "8001:8000"
+    volumes:
+      - "../app:/app"
+    working_dir: /app
+    environment:
+      - FLASK_ENV=production
+      - INTERNAL_NETWORK=true
+    networks:
+      - internal
+  database:
+    image: "postgres:13"
+    environment:
+      - POSTGRES_DB=app
+      - POSTGRES_USER=internal
+      - POSTGRES_PASSWORD=secure123
+    volumes:
+      - "postgres_data:/var/lib/postgresql/data"
+    networks:
+      - internal
+  guard:
+    image: "nginx:alpine"
+    ports:
+      - "8080:8080"
+    volumes:
+      - "./guard.conf:/etc/nginx/conf.d/default.conf:ro"
+    depends_on:
+      - web
+    networks:
+      - frontend
+      - backend
+volumes:
+  postgres_data: ~
+  guard-logs:
+    driver: local
+networks:
+  internal:
+    driver: bridge
+    internal: true
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge
+    internal: true

@@ -1,0 +1,9 @@
+[paths]
+components_dir = "./components"
+base_dir = "base"
+extensions_dirs = ["extensions"]
+build_dir = "./build"
+
+[build]
+environments = []
+extensions = ["monitoring"]

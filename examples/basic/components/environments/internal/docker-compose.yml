@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  web:
+    environment:
+      - NODE_ENV=production
+      - INTERNAL=true
+    networks:
+      - internal
+    ports:
+      - "80:80"
+
+  app:
+    environment:
+      - FLASK_ENV=production
+      - INTERNAL_NETWORK=true
+    networks:
+      - internal
+    ports: []
+
+  database:
+    image: postgres:13
+    environment:
+      - POSTGRES_DB=app
+      - POSTGRES_USER=internal
+      - POSTGRES_PASSWORD=secure123
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - internal
+
+volumes:
+  postgres_data:
+
+
+networks:
+  internal:
+    driver: bridge
+    internal: true

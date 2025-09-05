@@ -1,0 +1,64 @@
+---
+version: "3.8"
+services:
+  web:
+    image: "nginx:alpine"
+    ports:
+      - "8080:80"
+      - "3000:3000"
+    volumes:
+      - "./nginx.conf:/etc/nginx/nginx.conf:ro"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    depends_on:
+      - app
+    environment:
+      - NODE_ENV=development
+      - DEBUG=true
+      - OIDC_ENABLED=true
+      - OIDC_CLIENT_ID=web-app
+      - OIDC_CLIENT_SECRET=web-secret
+      - "OIDC_PROVIDER_URL=http://oidc-provider:8080"
+    command: "nginx -g 'daemon off;'"
+  app:
+    image: "python:3.9"
+    command: flask run --host=0.0.0.0
+    ports:
+      - "8001:8000"
+      - "5000:5000"
+    volumes:
+      - "../app:/app"
+      - "../app:/app"
+    working_dir: /app
+    environment:
+      - FLASK_ENV=development
+      - PYTHONUNBUFFERED=1
+  devcontainer:
+    image: "mcr.microsoft.com/devcontainers/python:3.9"
+    volumes:
+      - "../:/workspaces:cached"
+    working_dir: /workspaces
+    command: sleep infinity
+  oidc-provider:
+    image: "quay.io/keycloak/keycloak:latest"
+    environment:
+      - KEYCLOAK_ADMIN=admin
+      - KEYCLOAK_ADMIN_PASSWORD=admin123
+      - KC_DB=postgres
+      - "KC_DB_URL=jdbc:postgresql://postgres:5432/keycloak"
+      - KC_DB_USERNAME=keycloak
+      - KC_DB_PASSWORD=keycloak123
+    ports:
+      - "8083:8080"
+    depends_on:
+      - postgres
+    command: start-dev
+  postgres:
+    image: "postgres:13"
+    environment:
+      - POSTGRES_DB=keycloak
+      - POSTGRES_USER=keycloak
+      - POSTGRES_PASSWORD=keycloak123
+    volumes:
+      - "oidc_data:/var/lib/postgresql/data"
+volumes:
+  oidc_data: ~
