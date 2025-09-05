@@ -1,4 +1,6 @@
 use clap::{Parser, Subcommand};
+mod config;
+mod init;
 
 #[derive(Parser)]
 #[command(name = "stackbuilder")]
@@ -11,7 +13,7 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     /// Initialize a new stack
-    Init,
+    Init(init::InitArgs),
     /// Build the stack
     Build,
 }
@@ -20,8 +22,11 @@ fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Init => {
-            println!("Init command executed");
+        Commands::Init(args) => {
+            if let Err(e) = init::run_init(&args) {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
         }
         Commands::Build => {
             println!("Build command executed");
