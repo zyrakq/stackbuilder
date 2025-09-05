@@ -1,4 +1,5 @@
 mod merger;
+mod error;
 use clap::{Parser, Subcommand};
 mod config;
 mod init;
@@ -22,27 +23,41 @@ enum Commands {
     Build,
 }
 
-fn run_build() -> anyhow::Result<()> {
+use crate::error::{StackBuilderError, Result};
+
+fn run_build() -> Result<()> {
     build::execute_build()
 }
 
-fn main() -> anyhow::Result<()> {
+fn run_init(args: &init::InitArgs) -> Result<()> {
+    init::run_init(args)
+}
+
+fn print_error(error: &StackBuilderError) {
+    eprintln!("Error: {}", error);
+    
+    // Print suggestion if available
+    if let Some(suggestion) = error.suggestion() {
+        eprintln!("\nSuggestion: {}", suggestion);
+    }
+    
+    // Add context for common error patterns
+    if error.suggests_init() {
+        eprintln!("\nTo create a new project, run:");
+        eprintln!("  stackbuilder init");
+    }
+}
+
+fn main() {
     let cli = Cli::parse();
 
-    match cli.command {
-        Commands::Init(args) => {
-            if let Err(e) = init::run_init(&args) {
-                eprintln!("Error: {}", e);
-                std::process::exit(1);
-            }
-        }
-        Commands::Build => {
-            if let Err(e) = run_build() {
-                eprintln!("Error: {}", e);
-                std::process::exit(1);
-            }
-        }
-    }
+    let result = match cli.command {
+        Commands::Init(args) => run_init(&args),
+        Commands::Build => run_build(),
+    };
 
-    Ok(())
+    if let Err(error) = result {
+        print_error(&error);
+        std::process::exit(error.exit_code());
+    }
 }

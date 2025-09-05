@@ -1,10 +1,10 @@
 use std::fs;
 use std::path::Path;
-use anyhow::{anyhow, Result};
 use yaml_rust::{YamlEmitter, YamlLoader};
 
 use crate::config;
 use crate::merger::{ComposeMerger, merge_compose_files};
+use crate::error::{Result, BuildError, FileSystemError, YamlError};
 
 /// Structure for managing build process execution
 pub struct BuildExecutor {
@@ -38,11 +38,20 @@ impl BuildExecutor {
 pub fn execute_build() -> Result<()> {
     println!("Starting build process...");
 
-    let executor = BuildExecutor::new()?;
+    let executor = BuildExecutor::new()
+        .map_err(|e| BuildError::BuildProcessFailed {
+            details: format!("Failed to initialize build executor: {}", e),
+        })?;
     println!("Configuration loaded and validated");
 
     let combinations = determine_build_combinations(&executor.config)?;
     println!("Determined {} build combinations", combinations.len());
+
+    if combinations.is_empty() {
+        return Err(BuildError::BuildProcessFailed {
+            details: "No valid build combinations found".to_string(),
+        }.into());
+    }
 
     create_build_structure(&executor, &combinations)?;
 
@@ -69,9 +78,10 @@ fn determine_build_combinations(config: &config::Config) -> Result<Vec<BuildComb
 
     match (num_envs, extensions.len()) {
         (0, 0) => {
-            return Err(anyhow::anyhow!(
-                "Configuration must specify at least one environment or extension"
-            ));
+            return Err(BuildError::InvalidBuildCombination {
+                env: None,
+                extensions: vec![],
+            }.into());
         }
         (1, _) if !extensions.is_empty() => {
             // 1 environment with extensions: create base, and extension folders
@@ -187,9 +197,17 @@ fn create_build_structure(executor: &BuildExecutor, combinations: &[BuildCombina
 
     // Clean build directory
     if build_dir.exists() {
-        fs::remove_dir_all(build_dir)?;
+        fs::remove_dir_all(build_dir)
+            .map_err(|e| BuildError::BuildDirectoryCleanupFailed {
+                path: build_dir.to_path_buf(),
+                source: e,
+            })?;
     }
-    fs::create_dir_all(build_dir)?;
+    fs::create_dir_all(build_dir)
+        .map_err(|e| BuildError::BuildDirectoryCreationFailed {
+            path: build_dir.to_path_buf(),
+            source: e,
+        })?;
 
     for combo in combinations {
         println!("Processing combination: {:?}", combo.output_dir);
@@ -199,27 +217,48 @@ fn create_build_structure(executor: &BuildExecutor, combinations: &[BuildCombina
             (build_dir.to_path_buf(), "docker-compose.yml".to_string())
         } else {
             let path = build_dir.join(&combo.output_dir);
-            fs::create_dir_all(&path)?;
+            fs::create_dir_all(&path)
+                .map_err(|e| FileSystemError::DirectoryCreationFailed {
+                    path: path.clone(),
+                    source: e,
+                })?;
             (path, "docker-compose.yml".to_string())
         };
 
         // Merge compose files
         let environment_opt = combo.environment.as_ref().map(|s| s.as_str());
-        let merged = merge_compose_files(&executor.merger, environment_opt, &combo.extensions)?;
+        let merged = merge_compose_files(&executor.merger, environment_opt, &combo.extensions)
+            .map_err(|e| BuildError::BuildProcessFailed {
+                details: format!("Failed to merge compose files for combination {:?}: {}", combo.output_dir, e),
+            })?;
 
         // Write merged file
         let compose_path = output_path.join(&file_name);
         let yaml_string = serde_yaml::to_string(&merged)
-            .map_err(|e| anyhow!("Failed to serialize YAML: {}", e))?;
+            .map_err(|e| YamlError::SerializationError {
+                details: e.to_string(),
+            })?;
 
-        let yaml_docs = YamlLoader::load_from_str(&yaml_string)?;
+        let yaml_docs = YamlLoader::load_from_str(&yaml_string)
+            .map_err(|e| YamlError::ParseError {
+                file: "serialized output".to_string(),
+                details: format!("Failed to parse serialized YAML: {}", e),
+            })?;
+        
         let mut pretty_yaml_string = String::new();
         let mut emitter = YamlEmitter::new(&mut pretty_yaml_string);
         if let Some(yaml_doc) = yaml_docs.first() {
-            emitter.dump(yaml_doc)?;
+            emitter.dump(yaml_doc)
+                .map_err(|e| YamlError::SerializationError {
+                    details: format!("Failed to emit YAML: {}", e),
+                })?;
         }
 
-        fs::write(&compose_path, pretty_yaml_string)?;
+        fs::write(&compose_path, pretty_yaml_string)
+            .map_err(|e| BuildError::OutputFileWriteError {
+                path: compose_path.clone(),
+                source: e,
+            })?;
         println!("✓ Created {}", compose_path.display());
     }
 

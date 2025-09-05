@@ -1,0 +1,12 @@
+# Invalid TOML syntax example - missing closing bracket
+
+[paths]
+extensions_dirs = ["extensions"
+build_dir = "./build"
+
+[build]
+components_dir = "./components"
+base_dir = "base"
+environments_dir = "environments"
+environments = ["dev", "prod"]
+extensions = ["monitoring", "logging"]

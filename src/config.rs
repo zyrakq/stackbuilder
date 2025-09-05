@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use toml;
+use crate::error::{Result, ConfigError, ValidationError, FileSystemError};
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Config {
@@ -78,36 +80,41 @@ fn default_build_dir() -> String {
 }
 
 // Load and parse stackbuilder.toml configuration file
-pub fn load_config() -> Result<Config, anyhow::Error> {
+pub fn load_config() -> Result<Config> {
     let config_path = "stackbuilder.toml";
+    
     let content = std::fs::read_to_string(config_path)
-        .map_err(|e| anyhow::anyhow!("Failed to read config file '{}': {}", config_path, e))?;
+        .map_err(|e| match e.kind() {
+            std::io::ErrorKind::NotFound => ConfigError::config_not_found(config_path),
+            _ => ConfigError::ConfigFileReadError {
+                file: config_path.to_string(),
+                source: e,
+            }
+        })?;
 
     let config: Config = toml::from_str(&content)
-        .map_err(|e| anyhow::anyhow!("Failed to parse TOML in '{}': {}", config_path, e))?;
+        .map_err(|e| ConfigError::toml_parse_error(config_path, e))?;
 
     Ok(config)
 }
 
 // Validate configuration: check paths existence and requirements
-pub fn validate_config(config: &Config) -> Result<(), anyhow::Error> {
+pub fn validate_config(config: &Config) -> Result<()> {
     println!("Validating configuration...");
 
     // Check required directories
     let components_path = std::path::Path::new(&config.paths.components_dir);
     if !components_path.exists() {
-        return Err(anyhow::anyhow!(
-            "Components directory '{}' does not exist",
-            config.paths.components_dir
-        ));
+        return Err(ValidationError::ComponentsDirectoryNotFound {
+            path: components_path.to_path_buf(),
+        }.into());
     }
 
     let base_path = components_path.join(&config.paths.base_dir);
     if !base_path.exists() {
-        return Err(anyhow::anyhow!(
-            "Base directory '{}' does not exist in components_dir",
-            config.paths.base_dir
-        ));
+        return Err(ValidationError::BaseDirectoryNotFound {
+            path: base_path,
+        }.into());
     }
 
     // Check if build.targets has content, then must have environments or extensions
@@ -120,9 +127,7 @@ pub fn validate_config(config: &Config) -> Result<(), anyhow::Error> {
     let has_targets = has_environments || has_global_extensions || has_per_env_extensions;
 
     if !has_targets {
-        return Err(anyhow::anyhow!(
-            "Configuration must specify at least one environment or extension"
-        ));
+        return Err(ValidationError::NoTargetsSpecified.into());
     }
 
     // Check environments_dir if specified and not empty
@@ -130,18 +135,14 @@ pub fn validate_config(config: &Config) -> Result<(), anyhow::Error> {
         if !envs.is_empty() {
             let envs_path = components_path.join(&config.paths.environments_dir);
             if !envs_path.exists() {
-                return Err(anyhow::anyhow!(
-                    "Environments directory '{}' does not exist",
-                    envs_path.display()
-                ));
+                return Err(ValidationError::DirectoryNotFound {
+                    path: envs_path,
+                }.into());
             }
             for env in envs {
                 let env_path = envs_path.join(env);
                 if !env_path.exists() {
-                    return Err(anyhow::anyhow!(
-                        "Environment '{}' does not exist in environments_dir",
-                        env
-                    ));
+                    return Err(ValidationError::environment_not_found(env, envs_path.clone()).into());
                 }
             }
         }
@@ -152,10 +153,9 @@ pub fn validate_config(config: &Config) -> Result<(), anyhow::Error> {
         for ext_dir in &config.paths.extensions_dirs {
             let ext_path = components_path.join(ext_dir);
             if !ext_path.exists() {
-                return Err(anyhow::anyhow!(
-                    "Extensions directory '{}' does not exist",
-                    ext_path.display()
-                ));
+                return Err(ValidationError::DirectoryNotFound {
+                    path: ext_path,
+                }.into());
             }
         }
     }
@@ -165,21 +165,30 @@ pub fn validate_config(config: &Config) -> Result<(), anyhow::Error> {
 }
 
 // Resolve relative paths to absolute paths
-pub fn resolve_paths(config: &mut Config) -> Result<(), anyhow::Error> {
+pub fn resolve_paths(config: &mut Config) -> Result<()> {
     let components_path = std::path::Path::new(&config.paths.components_dir).canonicalize()
-        .map_err(|e| anyhow::anyhow!("Failed to resolve components_dir: {}", e))?;
+        .map_err(|e| ValidationError::PathResolutionError {
+            path: config.paths.components_dir.clone(),
+            details: e.to_string(),
+        })?;
 
     config.paths.components_dir = components_path.to_string_lossy().to_string();
 
     // Resolve other paths relative to components_dir
     let base_path = components_path.join(&config.paths.base_dir).canonicalize()
-        .map_err(|e| anyhow::anyhow!("Failed to resolve base_dir: {}", e))?;
+        .map_err(|e| ValidationError::PathResolutionError {
+            path: config.paths.base_dir.clone(),
+            details: e.to_string(),
+        })?;
     config.paths.base_dir = base_path.to_string_lossy().to_string();
 
     // Only resolve environments_dir if environments are specified in build.targets
     if config.build.environments.as_ref().map_or(false, |e| !e.is_empty()) {
         let env_path = components_path.join(&config.paths.environments_dir).canonicalize()
-            .map_err(|e| anyhow::anyhow!("Failed to resolve environments_dir: {}", e))?;
+            .map_err(|e| ValidationError::PathResolutionError {
+                path: config.paths.environments_dir.clone(),
+                details: e.to_string(),
+            })?;
         config.paths.environments_dir = env_path.to_string_lossy().to_string();
     }
 
@@ -190,7 +199,10 @@ pub fn resolve_paths(config: &mut Config) -> Result<(), anyhow::Error> {
         let mut resolved_ext_dirs = Vec::new();
         for ext_dir in &config.paths.extensions_dirs {
             let ext_path = components_path.join(ext_dir).canonicalize()
-                .map_err(|e| anyhow::anyhow!("Failed to resolve extensions_dir '{}': {}", ext_dir, e))?;
+                .map_err(|e| ValidationError::PathResolutionError {
+                    path: ext_dir.clone(),
+                    details: e.to_string(),
+                })?;
             resolved_ext_dirs.push(ext_path.to_string_lossy().to_string());
         }
         config.paths.extensions_dirs = resolved_ext_dirs;
@@ -205,14 +217,20 @@ pub fn resolve_paths(config: &mut Config) -> Result<(), anyhow::Error> {
 }
 
 // Discover available environments from environments_dir
-pub fn discover_environments(config: &Config) -> Result<Vec<String>, anyhow::Error> {
+pub fn discover_environments(config: &Config) -> Result<Vec<String>> {
     let envs_path = std::path::Path::new(&config.paths.environments_dir);
     let mut environments = Vec::new();
 
     if envs_path.exists() {
         for entry in std::fs::read_dir(envs_path)
-            .map_err(|e| anyhow::anyhow!("Failed to read environments directory: {}", e))? {
-            let entry = entry?;
+            .map_err(|e| FileSystemError::DirectoryReadFailed {
+                path: envs_path.to_path_buf(),
+                source: e,
+            })? {
+            let entry = entry.map_err(|e| FileSystemError::DirectoryReadFailed {
+                path: envs_path.to_path_buf(),
+                source: e,
+            })?;
             if entry.path().is_dir() {
                 if let Some(name) = entry.file_name().to_str() {
                     environments.push(name.to_string());
@@ -226,15 +244,21 @@ pub fn discover_environments(config: &Config) -> Result<Vec<String>, anyhow::Err
 }
 
 // Discover available extensions from extensions_dirs
-pub fn discover_extensions(config: &Config) -> Result<Vec<String>, anyhow::Error> {
+pub fn discover_extensions(config: &Config) -> Result<Vec<String>> {
     let mut extensions = Vec::new();
 
     for ext_dir in &config.paths.extensions_dirs {
         let ext_path = std::path::Path::new(ext_dir);
         if ext_path.exists() {
             for entry in std::fs::read_dir(ext_path)
-                .map_err(|e| anyhow::anyhow!("Failed to read extensions directory '{}': {}", ext_dir, e))? {
-                let entry = entry?;
+                .map_err(|e| FileSystemError::DirectoryReadFailed {
+                    path: ext_path.to_path_buf(),
+                    source: e,
+                })? {
+                let entry = entry.map_err(|e| FileSystemError::DirectoryReadFailed {
+                    path: ext_path.to_path_buf(),
+                    source: e,
+                })?;
                 if entry.path().is_dir() {
                     if let Some(name) = entry.file_name().to_str() {
                         extensions.push(name.to_string());

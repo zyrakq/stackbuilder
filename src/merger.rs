@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
-use anyhow::{anyhow, Result};
 use serde_yaml::{Mapping, Value};
+use crate::error::{Result, YamlError, FileSystemError};
 
 /// Structure for managing docker-compose file merging process
 pub struct ComposeMerger {
@@ -25,10 +25,28 @@ impl ComposeMerger {
 /// Load and parse docker-compose.yml file from given path
 pub fn load_compose_file(file_path: &str) -> Result<Value> {
     let content = fs::read_to_string(file_path)
-        .map_err(|e| anyhow!("Failed to read compose file '{}': {}", file_path, e))?;
+        .map_err(|e| FileSystemError::FileReadFailed {
+            path: file_path.into(),
+            source: e,
+        })?;
 
     let yaml_value: Value = serde_yaml::from_str(&content)
-        .map_err(|e| anyhow!("Failed to parse YAML in '{}': {}", file_path, e))?;
+        .map_err(|e| YamlError::serde_error(file_path, e))?;
+
+    // Validate basic docker-compose structure
+    if let Value::Mapping(ref map) = yaml_value {
+        if !map.contains_key(&Value::String("services".to_string())) {
+            return Err(YamlError::InvalidComposeFormat {
+                file: file_path.to_string(),
+                details: "Missing required 'services' section in docker-compose file".to_string(),
+            }.into());
+        }
+    } else {
+        return Err(YamlError::InvalidComposeFormat {
+            file: file_path.to_string(),
+            details: "Docker Compose file must be a YAML mapping/object".to_string(),
+        }.into());
+    }
 
     Ok(yaml_value)
 }
@@ -67,15 +85,21 @@ pub fn merge_compose_files(
     let file_paths = resolve_merge_order(merger, environment, extensions)?;
 
     let mut merged: Option<Value> = None;
+    let mut processed_files = 0;
 
     for file_path in file_paths {
         let yaml_value = match load_compose_file(&file_path) {
             Ok(val) => {
                 println!("Loaded and merging: {}", file_path);
+                processed_files += 1;
                 val
             }
             Err(e) => {
-                // Skip missing files with warning, don't fail completely
+                // For base file, this is an error
+                if file_path.contains("/base/") {
+                    return Err(e);
+                }
+                // For other files, skip with warning
                 println!("Warning: Skipping missing or invalid file '{}': {}", file_path, e);
                 continue;
             }
@@ -88,7 +112,15 @@ pub fn merge_compose_files(
         }
     }
 
-    merged.ok_or_else(|| anyhow!("No valid docker-compose files found to merge"))
+    if processed_files == 0 {
+        return Err(YamlError::MergeError {
+            details: "No valid docker-compose files found to merge".to_string(),
+        }.into());
+    }
+
+    merged.ok_or_else(|| YamlError::MergeError {
+        details: "Failed to merge docker-compose files".to_string(),
+    }.into())
 }
 
 /// Parse extension combination string like "oidc+guard" into vec of strings
@@ -118,12 +150,18 @@ pub fn resolve_merge_order(
 
     // Add extension files in order
     for ext in extensions {
+        let mut found = false;
         for ext_dir in &merger.extensions_paths {
             let ext_file = Path::new(ext_dir).join(ext).join("docker-compose.yml");
             if ext_file.exists() {
                 file_paths.push(ext_file.to_string_lossy().to_string());
+                found = true;
                 break; // Found in first matching directory
             }
+        }
+        
+        if !found {
+            println!("Warning: Extension '{}' not found in any extensions directory", ext);
         }
     }
 
