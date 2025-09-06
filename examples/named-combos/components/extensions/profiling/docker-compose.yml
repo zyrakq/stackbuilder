@@ -1,0 +1,16 @@
+version: '3.8'
+services:
+  profiler:
+    image: pyroscope/pyroscope:latest
+    ports:
+      - "4040:4040"
+    environment:
+      - PYROSCOPE_LOG_LEVEL=debug
+      - PYROSCOPE_STORAGE_PATH=/var/lib/pyroscope
+    volumes:
+      - profiler_data:/var/lib/pyroscope
+    command:
+      - "server"
+
+volumes:
+  profiler_data:

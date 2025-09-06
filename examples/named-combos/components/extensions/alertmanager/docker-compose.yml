@@ -1,0 +1,17 @@
+version: '3.8'
+services:
+  alertmanager:
+    image: prom/alertmanager:latest
+    ports:
+      - "9093:9093"
+    environment:
+      - ALERTMANAGER_WEB_EXTERNAL_URL=http://localhost:9093/
+    volumes:
+      - alertmanager_data:/alertmanager
+      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+
+volumes:
+  alertmanager_data:

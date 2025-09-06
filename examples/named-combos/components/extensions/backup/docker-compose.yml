@@ -1,0 +1,23 @@
+version: '3.8'
+services:
+  backup:
+    image: restic/restic:latest
+    environment:
+      - RESTIC_REPOSITORY=${BACKUP_REPOSITORY}
+      - RESTIC_PASSWORD=${BACKUP_PASSWORD}
+      - BACKUP_SCHEDULE=${BACKUP_SCHEDULE:-0 2 * * *}
+    volumes:
+      - /var/lib/docker/volumes:/backup-source:ro
+      - backup_cache:/cache
+    command: |
+      sh -c "
+        while true; do
+          echo 'Starting backup...'
+          restic backup /backup-source --cache-dir /cache
+          echo 'Backup completed. Sleeping until next scheduled backup...'
+          sleep 86400
+        done
+      "
+
+volumes:
+  backup_cache:

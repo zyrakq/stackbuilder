@@ -84,11 +84,11 @@ services:
     networks:
       - backend
 volumes:
-  web_data: ~
+  web_data:
   node_modules:
     driver: local
-  postgres_data: ~
-  redis_data: ~
+  postgres_data:
+  redis_data:
 networks:
   frontend:
     driver: bridge

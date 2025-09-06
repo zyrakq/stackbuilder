@@ -1,0 +1,53 @@
+---
+version: "3.8"
+services:
+  app:
+    image: "nginx:alpine"
+    ports:
+      - "80:80"
+    environment:
+      - APP_ENV=base
+    volumes:
+      - "./html:/usr/share/nginx/html"
+  prometheus:
+    image: "prom/prometheus:latest"
+    ports:
+      - "9090:9090"
+    environment:
+      - PROMETHEUS_RETENTION_TIME=15d
+    volumes:
+      - "prometheus_data:/prometheus"
+      - "./prometheus.yml:/etc/prometheus/prometheus.yml:ro"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/etc/prometheus/console_libraries"
+      - "--web.console.templates=/etc/prometheus/consoles"
+  grafana:
+    image: "grafana/grafana:latest"
+    ports:
+      - "3000:3000"
+    environment:
+      - "GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}"
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - "grafana_data:/var/lib/grafana"
+      - "./grafana/provisioning:/etc/grafana/provisioning:ro"
+    depends_on:
+      - prometheus
+  alertmanager:
+    image: "prom/alertmanager:latest"
+    ports:
+      - "9093:9093"
+    environment:
+      - "ALERTMANAGER_WEB_EXTERNAL_URL=http://localhost:9093/"
+    volumes:
+      - "alertmanager_data:/alertmanager"
+      - "./alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro"
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+volumes:
+  prometheus_data:
+  grafana_data:
+  alertmanager_data:

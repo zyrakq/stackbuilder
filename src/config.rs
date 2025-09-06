@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use crate::error::{Result, ConfigError, ValidationError, FileSystemError};
 
 #[derive(Deserialize, Serialize, Debug, Default, Clone)]
@@ -37,8 +38,9 @@ impl Default for Paths {
 pub struct Build {
     pub environments: Option<Vec<String>>,
     pub extensions: Option<Vec<String>>,
-    pub combos: Option<Vec<String>>,
-    pub environment: Option<Vec<EnvironmentConfig>>,
+    #[serde(default)]
+    pub combos: HashMap<String, Vec<String>>,
+    pub targets: Option<BuildTargets>,
     #[serde(default = "default_copy_env_example")]
     pub copy_env_example: bool,
     #[serde(default = "default_copy_additional_files")]
@@ -47,13 +49,26 @@ pub struct Build {
     pub exclude_patterns: Vec<String>,
 }
 
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct BuildTargets {
+    pub environments: Option<Vec<String>>,
+    #[serde(flatten)]
+    pub environment_configs: HashMap<String, EnvironmentTarget>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct EnvironmentTarget {
+    pub extensions: Option<Vec<String>>,
+    pub combos: Option<Vec<String>>,
+}
+
 impl Default for Build {
     fn default() -> Self {
         Build {
             environments: None,
             extensions: None,
-            combos: None,
-            environment: None,
+            combos: HashMap::new(),
+            targets: None,
             copy_env_example: default_copy_env_example(),
             copy_additional_files: default_copy_additional_files(),
             exclude_patterns: default_exclude_patterns(),
@@ -61,6 +76,7 @@ impl Default for Build {
     }
 }
 
+// Legacy support for old configuration format
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct EnvironmentConfig {
     pub name: String,
@@ -145,18 +161,18 @@ pub fn validate_config(config: &Config) -> Result<()> {
         }.into());
     }
 
-    // Check if build.targets has content, then must have environments or extensions
-    let has_environments = config.build.environments.as_ref().is_some_and(|e| !e.is_empty());
-    let has_global_extensions = config.build.extensions.as_ref().is_some_and(|e| !e.is_empty());
-    let has_per_env_extensions = config.build.environment.as_ref().is_some_and(|envs| {
-        envs.iter().any(|env| env.extensions.as_ref().is_some_and(|ext| !ext.is_empty()))
-    });
+    // Check if build configuration has valid targets
+    let has_legacy_environments = config.build.environments.as_ref().is_some_and(|e| !e.is_empty());
+    let has_legacy_extensions = config.build.extensions.as_ref().is_some_and(|e| !e.is_empty());
+    let has_combos = !config.build.combos.is_empty();
+    let has_targets = config.build.targets.is_some();
 
-    let has_targets = has_environments || has_global_extensions || has_per_env_extensions;
-
-    if !has_targets {
+    if !has_legacy_environments && !has_legacy_extensions && !has_combos && !has_targets {
         return Err(ValidationError::NoTargetsSpecified.into());
     }
+
+    // Validate combo definitions
+    validate_combo_definitions(config)?;
 
     // Check environments_dir if specified and not empty
     if let Some(ref envs) = config.build.environments {
@@ -176,8 +192,13 @@ pub fn validate_config(config: &Config) -> Result<()> {
         }
     }
 
+    // Validate targets section if present
+    if let Some(ref targets) = config.build.targets {
+        validate_build_targets(config, targets)?;
+    }
+
     // Check extensions_dirs if extensions are specified
-    if has_global_extensions || has_per_env_extensions {
+    if has_legacy_extensions || has_combos || has_targets {
         for ext_dir in &config.paths.extensions_dirs {
             let ext_path = components_path.join(ext_dir);
             if !ext_path.exists() {
@@ -189,6 +210,82 @@ pub fn validate_config(config: &Config) -> Result<()> {
     }
 
     println!("Configuration validation passed");
+    Ok(())
+}
+
+// Validate combo definitions
+fn validate_combo_definitions(config: &Config) -> Result<()> {
+    let available_extensions = discover_extensions(config)?;
+    
+    for (combo_name, extensions) in &config.build.combos {
+        if extensions.is_empty() {
+            return Err(ValidationError::InvalidComboDefinition {
+                combo_name: combo_name.clone(),
+                details: "Combo must contain at least one extension".to_string(),
+            }.into());
+        }
+        
+        for ext in extensions {
+            if !available_extensions.contains(ext) {
+                return Err(ValidationError::ExtensionNotFound {
+                    name: ext.clone(),
+                    available_dirs: config.paths.extensions_dirs.clone(),
+                }.into());
+            }
+        }
+        
+        println!("✓ Validated combo '{}': {:?}", combo_name, extensions);
+    }
+    
+    Ok(())
+}
+
+// Validate build targets section
+fn validate_build_targets(config: &Config, targets: &BuildTargets) -> Result<()> {
+    let available_extensions = discover_extensions(config)?;
+    
+    // Validate target environments exist
+    if let Some(ref envs) = targets.environments {
+        let envs_path = std::path::Path::new(&config.paths.components_dir)
+            .join(&config.paths.environments_dir);
+        
+        for env in envs {
+            let env_path = envs_path.join(env);
+            if !env_path.exists() {
+                return Err(ValidationError::environment_not_found(env, envs_path.clone()).into());
+            }
+        }
+    }
+    
+    // Validate each environment target configuration
+    for (env_name, env_target) in &targets.environment_configs {
+        // Validate extensions
+        if let Some(ref extensions) = env_target.extensions {
+            for ext in extensions {
+                if !available_extensions.contains(ext) {
+                    return Err(ValidationError::ExtensionNotFound {
+                        name: ext.clone(),
+                        available_dirs: config.paths.extensions_dirs.clone(),
+                    }.into());
+                }
+            }
+        }
+        
+        // Validate combo references
+        if let Some(ref combos) = env_target.combos {
+            for combo_name in combos {
+                if !config.build.combos.contains_key(combo_name) {
+                    return Err(ValidationError::ComboNotFound {
+                        combo_name: combo_name.clone(),
+                        available_combos: config.build.combos.keys().cloned().collect(),
+                    }.into());
+                }
+            }
+        }
+        
+        println!("✓ Validated target environment '{}' configuration", env_name);
+    }
+    
     Ok(())
 }
 
@@ -221,9 +318,7 @@ pub fn resolve_paths(config: &mut Config) -> Result<()> {
     }
 
     // Only resolve extensions_dirs if extensions are specified in build.targets
-    if config.build.extensions.is_some() || config.build.environment.as_ref().is_some_and(|envs| {
-        envs.iter().any(|env| env.extensions.is_some())
-    }) {
+    if config.build.extensions.is_some() || !config.build.combos.is_empty() || config.build.targets.is_some() {
         let mut resolved_ext_dirs = Vec::new();
         for ext_dir in &config.paths.extensions_dirs {
             let ext_path = components_path.join(ext_dir).canonicalize()
@@ -298,4 +393,58 @@ pub fn discover_extensions(config: &Config) -> Result<Vec<String>> {
 
     println!("Discovered extensions: {:?}", extensions);
     Ok(extensions)
+}
+
+// Resolve combo extensions into a flat list of extension names
+pub fn resolve_combo_extensions(config: &Config, combo_names: &[String]) -> Result<Vec<String>> {
+    let mut resolved_extensions = Vec::new();
+    
+    for combo_name in combo_names {
+        if let Some(extensions) = config.build.combos.get(combo_name) {
+            for ext in extensions {
+                if !resolved_extensions.contains(ext) {
+                    resolved_extensions.push(ext.clone());
+                }
+            }
+            println!("✓ Resolved combo '{}' to extensions: {:?}", combo_name, extensions);
+        } else {
+            return Err(ValidationError::ComboNotFound {
+                combo_name: combo_name.clone(),
+                available_combos: config.build.combos.keys().cloned().collect(),
+            }.into());
+        }
+    }
+    
+    Ok(resolved_extensions)
+}
+
+// Get all extensions for an environment target (combining direct extensions and combo extensions)
+pub fn get_target_extensions(config: &Config, env_target: &EnvironmentTarget) -> Result<Vec<String>> {
+    let mut all_extensions = Vec::new();
+    
+    // Add direct extensions
+    if let Some(ref extensions) = env_target.extensions {
+        for ext in extensions {
+            if !all_extensions.contains(ext) {
+                all_extensions.push(ext.clone());
+            }
+        }
+    }
+    
+    // Add combo extensions
+    if let Some(ref combos) = env_target.combos {
+        let combo_extensions = resolve_combo_extensions(config, combos)?;
+        for ext in combo_extensions {
+            if !all_extensions.contains(&ext) {
+                all_extensions.push(ext);
+            }
+        }
+    }
+    
+    Ok(all_extensions)
+}
+
+// Get combo names for an environment target
+pub fn get_target_combo_names(env_target: &EnvironmentTarget) -> Vec<String> {
+    env_target.combos.as_ref().map_or_else(Vec::new, |combos| combos.clone())
 }

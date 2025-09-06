@@ -1,0 +1,13 @@
+version: '3.8'
+services:
+  debug-tools:
+    image: nicolaka/netshoot:latest
+    command: sleep infinity
+    network_mode: "service:app"
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - DEBUG_MODE=enabled
+      - TRACE_LEVEL=verbose
+    volumes:
+      - ./debug-scripts:/scripts:ro

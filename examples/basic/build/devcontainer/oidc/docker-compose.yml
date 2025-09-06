@@ -61,4 +61,4 @@ services:
     volumes:
       - "oidc_data:/var/lib/postgresql/data"
 volumes:
-  oidc_data: ~
+  oidc_data:

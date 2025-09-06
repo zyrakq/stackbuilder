@@ -166,11 +166,11 @@ services:
       - backend
     restart: unless-stopped
 volumes:
-  web_data: ~
+  web_data:
   node_modules:
     driver: local
-  postgres_data: ~
-  redis_data: ~
+  postgres_data:
+  redis_data:
   prometheus_data:
     driver: local
   grafana_data:

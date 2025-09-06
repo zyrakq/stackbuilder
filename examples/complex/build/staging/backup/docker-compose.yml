@@ -225,10 +225,10 @@ services:
       - backend
     restart: unless-stopped
 volumes:
-  web_data: ~
-  node_modules: ~
-  postgres_data: ~
-  redis_data: ~
+  web_data:
+  node_modules:
+  postgres_data:
+  redis_data:
   staging_ssl_certs:
     external: true
   staging_ssl_keys:

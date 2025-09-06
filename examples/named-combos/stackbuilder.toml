@@ -1,0 +1,36 @@
+[paths]
+components_dir = "./components"
+base_dir = "base"
+environments_dir = "environments"
+extensions_dirs = ["extensions"]
+build_dir = "./build"
+
+[build]
+# Define named combos as inline tables
+combos = { security = [
+    "oidc",
+    "guard",
+], monitoring = [
+    "prometheus",
+    "grafana",
+    "alertmanager",
+], development = [
+    "debugging",
+    "profiling",
+] }
+
+# Use new targets configuration
+[build.targets]
+environments = ["dev", "staging", "prod"]
+
+# Per-environment configuration using combos and extensions
+[build.targets.dev]
+extensions = ["logging"]
+combos = ["security", "development"]
+
+[build.targets.staging]
+extensions = ["backup"]
+combos = ["monitoring"]
+
+[build.targets.prod]
+combos = ["security", "monitoring"]

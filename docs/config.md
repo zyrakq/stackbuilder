@@ -22,10 +22,60 @@ Defines the build rules and configurations.
 
 - `environments` (array of strings, optional): List of environment names to build. If omitted, all found environments are built.
 - `extensions` (array of strings, optional): Global list of extensions to apply to all environments. Alternative to per-environment configuration.
-- `combos` (array of strings, optional): List of extension combinations (e.g., `["oidc+guard", "monitoring+security"]`)
+- `combos` (table, optional): Named combinations of extensions (see Named Combos section below)
+- `targets` (table, optional): New-style target configuration supporting named combos (see Build Targets section below)
 - `copy_env_example` (boolean, default: `true`): Enable merging of .env.example files from components into output directories
 - `copy_additional_files` (boolean, default: `true`): Enable copying of additional files (configs, scripts, certificates) from components with priority-based overriding
 - `exclude_patterns` (array of strings, default: `["docker-compose.yml", ".env.example", "*.tmp", ".git*", "node_modules", "*.log"]`): Glob patterns for files to exclude from additional file copying
+
+#### Named Combos
+
+Named combos allow you to define reusable combinations of extensions that can be referenced by name:
+
+```toml
+[build]
+# Define named combos as inline tables
+combos = {
+    security = ["oidc", "guard"],
+    monitoring = ["prometheus", "grafana", "alertmanager"],
+    development = ["debugging", "profiling"]
+}
+```
+
+Benefits of named combos:
+
+- **Reusability**: Define once, use multiple times across environments
+- **Maintainability**: Change combo definition updates all usages
+- **Readability**: Semantic names instead of extension lists
+- **Consistency**: Ensure same extension combinations across environments
+
+#### Build Targets
+
+The new `targets` configuration provides more flexible environment and combo management:
+
+```toml
+[build.targets]
+environments = ["dev", "staging", "prod"]
+
+# Per-environment configuration
+[build.targets.dev]
+extensions = ["logging"]          # Individual extensions
+combos = ["security", "development"]  # Named combos
+
+[build.targets.staging]
+extensions = ["backup"]
+combos = ["monitoring"]
+
+[build.targets.prod]
+combos = ["security", "monitoring"]  # Only combos, no individual extensions
+```
+
+Where:
+
+- `environments` (array of strings, optional): List of environments to build
+- `[build.targets.{env}]` sections define per-environment configuration:
+  - `extensions` (array of strings, optional): Individual extensions for this environment
+  - `combos` (array of strings, optional): Named combos to apply to this environment
 
 #### Per-Environment Configuration
 
@@ -47,7 +97,7 @@ Where:
 1. **Existence Check**: All specified paths must exist or be creatable
 2. **Minimum Requirements**: At least one environment OR one extension must be specified (either globally or per-environment)
 3. **Component Validation**: Base directory must contain valid components, environment and extension directories must exist if specified
-4. **Combos Validation**: Extension combinations must reference valid extension names separated by '+'
+4. **Combos Validation**: Named combinations must reference valid extension names defined in available extensions
 
 ## Default Values
 
@@ -67,15 +117,16 @@ If `stackbuilder.toml` is missing or incomplete, these defaults apply:
 For TOML deserialization using serde, the following Rust structure can be used:
 
 ```rust
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize, Debug, Default, Clone)]
 pub struct Config {
     pub paths: Paths,
     pub build: Build,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Paths {
     #[serde(default = "default_components_dir")]
     pub components_dir: String,
@@ -89,12 +140,13 @@ pub struct Paths {
     pub build_dir: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Build {
     pub environments: Option<Vec<String>>,
     pub extensions: Option<Vec<String>>,
-    pub combos: Option<Vec<String>>,
-    pub environment: Option<Vec<EnvironmentConfig>>,
+    #[serde(default)]
+    pub combos: HashMap<String, Vec<String>>,
+    pub targets: Option<BuildTargets>,
     #[serde(default = "default_copy_env_example")]
     pub copy_env_example: bool,
     #[serde(default = "default_copy_additional_files")]
@@ -103,7 +155,21 @@ pub struct Build {
     pub exclude_patterns: Vec<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct BuildTargets {
+    pub environments: Option<Vec<String>>,
+    #[serde(flatten)]
+    pub environment_configs: HashMap<String, EnvironmentTarget>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct EnvironmentTarget {
+    pub extensions: Option<Vec<String>>,
+    pub combos: Option<Vec<String>>,
+}
+
+// Legacy support for old configuration format
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct EnvironmentConfig {
     pub name: String,
     pub extensions: Option<Vec<String>>,
@@ -178,10 +244,73 @@ build_dir = "./build"
 [build]
 environments = ["test"]
 extensions = ["oidc", "guard", "monitoring"]
-combos = ["oidc+guard"]
+
+# Define named combos
+combos = { security = ["oidc", "guard"] }
+
+# Use targets to apply combos
+[build.targets]
+environments = ["test"]
+
+[build.targets.test]
+combos = ["security"]
 ```
 
-### Full Configuration with All Features
+### Named Combos Configuration Example
+
+```toml
+[paths]
+components_dir = "./components"
+base_dir = "base"
+environments_dir = "environments"
+extensions_dirs = ["extensions"]
+build_dir = "./build"
+
+[build]
+# Define named combos
+combos = {
+    security = ["oidc", "guard"],
+    monitoring = ["prometheus", "grafana", "alertmanager"],
+    development = ["debugging", "profiling"]
+}
+
+# Use new targets configuration
+[build.targets]
+environments = ["dev", "staging", "prod"]
+
+# Per-environment configuration using combos and extensions
+[build.targets.dev]
+extensions = ["logging"]
+combos = ["security", "development"]
+
+[build.targets.staging]
+extensions = ["backup"]
+combos = ["monitoring"]
+
+[build.targets.prod]
+combos = ["security", "monitoring"]
+```
+
+This configuration creates the following build structure:
+
+```sh
+build/
+├── dev/
+│   ├── base/docker-compose.yml
+│   ├── logging/docker-compose.yml          # Individual extension
+│   ├── security/docker-compose.yml         # Named combo (oidc + guard)
+│   └── development/docker-compose.yml      # Named combo (debugging + profiling)
+├── staging/
+│   ├── base/docker-compose.yml
+│   ├── backup/docker-compose.yml           # Individual extension
+│   └── monitoring/docker-compose.yml       # Named combo (prometheus + grafana + alertmanager)
+└── prod/
+    ├── base/docker-compose.yml
+    ├── security/docker-compose.yml         # Named combo (oidc + guard)
+    └── monitoring/docker-compose.yml       # Named combo (prometheus + grafana + alertmanager)
+```
+
+### Legacy Configuration (Backwards Compatible)
 
 ```toml
 [paths]
@@ -194,20 +323,6 @@ build_dir = "./build"
 [build]
 environments = ["dev", "test", "staging", "prod"]
 extensions = ["basic_auth"]  # Global extensions
-combos = ["oidc+guard", "monitoring+backup"]
-
-# Per-environment overrides
-[[build.environment]]
-name = "dev"
-extensions = ["oidc", "guard", "debug_tools"]
-
-[[build.environment]]
-name = "prod"
-extensions = ["oidc", "guard", "security_hardening"]
-
-[[build.environment]]
-name = "test"
-extensions = ["basic_auth", "test_tools"]
 ```
 
 This configuration provides flexible component assembly while maintaining intuitive defaults for quick setup.

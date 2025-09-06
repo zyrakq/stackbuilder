@@ -1,0 +1,23 @@
+---
+version: "3.8"
+services:
+  app:
+    image: "nginx:alpine"
+    ports:
+      - "80:80"
+    environment:
+      - APP_ENV=base
+    volumes:
+      - "./html:/usr/share/nginx/html"
+  backup:
+    image: "restic/restic:latest"
+    environment:
+      - "RESTIC_REPOSITORY=${BACKUP_REPOSITORY}"
+      - "RESTIC_PASSWORD=${BACKUP_PASSWORD}"
+      - "BACKUP_SCHEDULE=${BACKUP_SCHEDULE:-0 2 * * *}"
+    volumes:
+      - "/var/lib/docker/volumes:/backup-source:ro"
+      - "backup_cache:/cache"
+    command: "sh -c \"\n  while true; do\n    echo 'Starting backup...'\n    restic backup /backup-source --cache-dir /cache\n    echo 'Backup completed. Sleeping until next scheduled backup...'\n    sleep 86400\n  done\n\"\n"
+volumes:
+  backup_cache:

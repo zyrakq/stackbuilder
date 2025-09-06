@@ -535,6 +535,7 @@ dependencies = [
  "clap",
  "glob",
  "predicates",
+ "regex",
  "serde",
  "serde_yaml",
  "tempfile",

@@ -1,0 +1,11 @@
+version: '3.8'
+services:
+  app:
+    environment:
+      - APP_ENV=production
+      - DEBUG=false
+      - LOG_LEVEL=warn
+    deploy:
+      replicas: 3
+      restart_policy:
+        condition: on-failure

@@ -1,0 +1,10 @@
+version: '3.8'
+services:
+  app:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    environment:
+      - APP_ENV=base
+    volumes:
+      - ./html:/usr/share/nginx/html

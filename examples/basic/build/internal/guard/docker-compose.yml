@@ -53,7 +53,7 @@ services:
       - frontend
       - backend
 volumes:
-  postgres_data: ~
+  postgres_data:
   guard-logs:
     driver: local
 networks:

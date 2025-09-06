@@ -6,7 +6,7 @@ use crate::config;
 use crate::merger::{ComposeMerger, merge_compose_files};
 use crate::env_merger::{EnvMerger, merge_env_files, write_merged_env};
 use crate::file_copier::FileCopier;
-use crate::error::{Result, BuildError, FileSystemError, YamlError};
+use crate::error::{Result, BuildError, FileSystemError, YamlError, ValidationError};
 
 /// Structure for managing build process execution
 pub struct BuildExecutor {
@@ -72,6 +72,144 @@ pub fn execute_build() -> Result<()> {
 fn determine_build_combinations(config: &config::Config) -> Result<Vec<BuildCombination>> {
     let mut combinations = Vec::new();
 
+    // Check if we have new targets configuration
+    if let Some(ref targets) = config.build.targets {
+        combinations = resolve_target_combinations(config, targets)?;
+    } else {
+        // Legacy mode: use old logic for backwards compatibility
+        combinations = resolve_legacy_combinations(config)?;
+    }
+
+    if combinations.is_empty() {
+        return Err(BuildError::BuildProcessFailed {
+            details: "No valid build combinations found".to_string(),
+        }.into());
+    }
+
+    println!("Generated {} build combinations:", combinations.len());
+    for combo in &combinations {
+        println!("  → {}: env={:?}, extensions={:?}, combos={:?}",
+                combo.output_dir, combo.environment, combo.extensions, combo.combo_names);
+    }
+
+    Ok(combinations)
+}
+
+/// Resolve build combinations from new targets configuration
+fn resolve_target_combinations(config: &config::Config, targets: &config::BuildTargets) -> Result<Vec<BuildCombination>> {
+    let mut combinations = Vec::new();
+    
+    // Get environments from targets or fallback to global config
+    let environments = targets.environments.as_ref()
+        .or(config.build.environments.as_ref())
+        .map_or_else(Vec::new, |v| v.clone());
+
+    if environments.is_empty() {
+        // No environments, create extension-only combinations
+        for (_env_name, env_target) in &targets.environment_configs {
+            let direct_extensions = env_target.extensions.as_ref().map_or_else(Vec::new, |ext| ext.clone());
+            let combo_names = config::get_target_combo_names(env_target);
+            
+            // Create combinations for individual extensions
+            for ext in &direct_extensions {
+                combinations.push(BuildCombination {
+                    environment: None,
+                    extensions: vec![ext.clone()],
+                    combo_names: vec![],
+                    output_dir: ext.clone(),
+                });
+            }
+            
+            // Create combinations for each named combo
+            for combo_name in &combo_names {
+                let combo_extensions = config.build.combos.get(combo_name)
+                    .ok_or_else(|| ValidationError::ComboNotFound {
+                        combo_name: combo_name.clone(),
+                        available_combos: config.build.combos.keys().cloned().collect(),
+                    })?;
+                
+                combinations.push(BuildCombination {
+                    environment: None,
+                    extensions: combo_extensions.clone(),
+                    combo_names: vec![combo_name.clone()],
+                    output_dir: combo_name.clone(),
+                });
+            }
+        }
+        
+        // Add base-only combination if no other combinations
+        if combinations.is_empty() {
+            combinations.push(BuildCombination {
+                environment: None,
+                extensions: vec![],
+                combo_names: vec![],
+                output_dir: "base".to_string(),
+            });
+        }
+    } else {
+        // Process each environment
+        for env in &environments {
+            // Environment base
+            combinations.push(BuildCombination {
+                environment: Some(env.clone()),
+                extensions: vec![],
+                combo_names: vec![],
+                output_dir: if environments.len() == 1 { env.clone() } else { format!("{}/base", env) },
+            });
+            
+            // Check if environment has specific configuration
+            if let Some(env_target) = targets.environment_configs.get(env) {
+                let direct_extensions = env_target.extensions.as_ref().map_or_else(Vec::new, |ext| ext.clone());
+                let combo_names = config::get_target_combo_names(env_target);
+                
+                // Create combinations for individual extensions
+                for ext in &direct_extensions {
+                    let output_dir = if environments.len() == 1 {
+                        format!("{}/{}", env, ext)
+                    } else {
+                        format!("{}/{}", env, ext)
+                    };
+                    
+                    combinations.push(BuildCombination {
+                        environment: Some(env.clone()),
+                        extensions: vec![ext.clone()],
+                        combo_names: vec![],
+                        output_dir,
+                    });
+                }
+                
+                // Create combinations for each named combo
+                for combo_name in &combo_names {
+                    let combo_extensions = config.build.combos.get(combo_name)
+                        .ok_or_else(|| ValidationError::ComboNotFound {
+                            combo_name: combo_name.clone(),
+                            available_combos: config.build.combos.keys().cloned().collect(),
+                        })?;
+                    
+                    let output_dir = if environments.len() == 1 {
+                        format!("{}/{}", env, combo_name)
+                    } else {
+                        format!("{}/{}", env, combo_name)
+                    };
+                    
+                    combinations.push(BuildCombination {
+                        environment: Some(env.clone()),
+                        extensions: combo_extensions.clone(),
+                        combo_names: vec![combo_name.clone()],
+                        output_dir,
+                    });
+                }
+            }
+        }
+    }
+    
+    Ok(combinations)
+}
+
+/// Resolve build combinations using legacy configuration
+fn resolve_legacy_combinations(config: &config::Config) -> Result<Vec<BuildCombination>> {
+    let mut combinations = Vec::new();
+
     let environments = config.build.environments.as_ref().map_or_else(Vec::new, |v| v.clone());
     let extensions = config.build.extensions.as_ref().map_or_else(Vec::new, |v| v.clone());
 
@@ -100,6 +238,7 @@ fn determine_build_combinations(config: &config::Config) -> Result<Vec<BuildComb
             combinations.push(BuildCombination {
                 environment: Some(env.clone()),
                 extensions: vec![],
+                combo_names: vec![],
                 output_dir: env.clone(),
             });
 
@@ -111,6 +250,7 @@ fn determine_build_combinations(config: &config::Config) -> Result<Vec<BuildComb
                     combinations.push(BuildCombination {
                         environment: Some(env.clone()),
                         extensions: ext_combo.clone(),
+                        combo_names: vec![],
                         output_dir,
                     });
                 }
@@ -122,6 +262,7 @@ fn determine_build_combinations(config: &config::Config) -> Result<Vec<BuildComb
                 combinations.push(BuildCombination {
                     environment: Some(env.clone()),
                     extensions: vec![],
+                    combo_names: vec![],
                     output_dir: env.clone(),
                 });
             }
@@ -134,6 +275,7 @@ fn determine_build_combinations(config: &config::Config) -> Result<Vec<BuildComb
                 combinations.push(BuildCombination {
                     environment: Some(env.clone()),
                     extensions: vec![],
+                    combo_names: vec![],
                     output_dir: env.clone(),
                 });
                 for ext_combo in &all_extension_combos {
@@ -143,6 +285,7 @@ fn determine_build_combinations(config: &config::Config) -> Result<Vec<BuildComb
                         combinations.push(BuildCombination {
                             environment: Some(env.clone()),
                             extensions: ext_combo.clone(),
+                            combo_names: vec![],
                             output_dir,
                         });
                     }
@@ -154,6 +297,7 @@ fn determine_build_combinations(config: &config::Config) -> Result<Vec<BuildComb
                     combinations.push(BuildCombination {
                         environment: Some(env.clone()),
                         extensions: vec![],
+                        combo_names: vec![],
                         output_dir: format!("{}/base", env),
                     });
 
@@ -165,6 +309,7 @@ fn determine_build_combinations(config: &config::Config) -> Result<Vec<BuildComb
                             combinations.push(BuildCombination {
                                 environment: Some(env.clone()),
                                 extensions: ext_combo.clone(),
+                                combo_names: vec![],
                                 output_dir,
                             });
                         }
@@ -184,6 +329,7 @@ fn determine_build_combinations(config: &config::Config) -> Result<Vec<BuildComb
                 combinations.push(BuildCombination {
                     environment: None,
                     extensions: ext_combo.clone(),
+                    combo_names: vec![],
                     output_dir: combo_str,
                 });
             } else if num_envs == 0 {
@@ -191,6 +337,7 @@ fn determine_build_combinations(config: &config::Config) -> Result<Vec<BuildComb
                 combinations.push(BuildCombination {
                     environment: None,
                     extensions: vec![],
+                    combo_names: vec![],
                     output_dir: "base".to_string(),
                 });
             }
@@ -198,6 +345,49 @@ fn determine_build_combinations(config: &config::Config) -> Result<Vec<BuildComb
     }
 
     Ok(combinations)
+}
+
+/// Format output directory name for combinations
+fn format_combo_output_dir(extensions: &[String], combo_names: &[String]) -> String {
+    let mut parts = Vec::new();
+    
+    if !extensions.is_empty() {
+        parts.extend(extensions.iter().cloned());
+    }
+    
+    if !combo_names.is_empty() {
+        parts.extend(combo_names.iter().cloned());
+    }
+    
+    if parts.is_empty() {
+        "base".to_string()
+    } else {
+        parts.join("+")
+    }
+}
+
+/// Resolve all extensions from direct extensions and combo names
+fn resolve_all_extensions(config: &config::Config, direct_extensions: &[String], combo_names: &[String]) -> Result<Vec<String>> {
+    let mut all_extensions = Vec::new();
+    
+    // Add direct extensions
+    for ext in direct_extensions {
+        if !all_extensions.contains(ext) {
+            all_extensions.push(ext.clone());
+        }
+    }
+    
+    // Add extensions from combos
+    if !combo_names.is_empty() {
+        let combo_extensions = config::resolve_combo_extensions(config, combo_names)?;
+        for ext in combo_extensions {
+            if !all_extensions.contains(&ext) {
+                all_extensions.push(ext);
+            }
+        }
+    }
+    
+    Ok(all_extensions)
 }
 
 /// Create build directory structure and merge files
@@ -236,34 +426,20 @@ fn create_build_structure(executor: &BuildExecutor, combinations: &[BuildCombina
 
         // Merge compose files
         let environment_opt = combo.environment.as_deref();
-        let merged = merge_compose_files(&executor.merger, environment_opt, &combo.extensions)
+        
+        // Resolve all extensions (direct + from combos)
+        let all_extensions = resolve_all_extensions(&executor.config, &combo.extensions, &combo.combo_names)?;
+        
+        let merged = merge_compose_files(&executor.merger, environment_opt, &all_extensions)
             .map_err(|e| BuildError::BuildProcessFailed {
                 details: format!("Failed to merge compose files for combination {:?}: {}", combo.output_dir, e),
             })?;
 
         // Write merged file
         let compose_path = output_path.join(&file_name);
-        let yaml_string = serde_yaml::to_string(&merged)
-            .map_err(|e| YamlError::SerializationError {
-                details: e.to_string(),
-            })?;
+        let yaml_string = serialize_yaml_with_proper_indentation(&merged)?;
 
-        let yaml_docs = YamlLoader::load_from_str(&yaml_string)
-            .map_err(|e| YamlError::ParseError {
-                file: "serialized output".to_string(),
-                details: format!("Failed to parse serialized YAML: {}", e),
-            })?;
-        
-        let mut pretty_yaml_string = String::new();
-        let mut emitter = YamlEmitter::new(&mut pretty_yaml_string);
-        if let Some(yaml_doc) = yaml_docs.first() {
-            emitter.dump(yaml_doc)
-                .map_err(|e| YamlError::SerializationError {
-                    details: format!("Failed to emit YAML: {}", e),
-                })?;
-        }
-
-        fs::write(&compose_path, pretty_yaml_string)
+        fs::write(&compose_path, yaml_string)
             .map_err(|e| BuildError::OutputFileWriteError {
                 path: compose_path.clone(),
                 source: e,
@@ -275,7 +451,10 @@ fn create_build_structure(executor: &BuildExecutor, combinations: &[BuildCombina
             let env_file_path = output_path.join(".env.example");
             let environment_opt = combo.environment.as_deref();
             
-            match merge_env_files(&executor.env_merger, environment_opt, &combo.extensions) {
+            // Resolve all extensions for .env merging
+            let all_extensions = resolve_all_extensions(&executor.config, &combo.extensions, &combo.combo_names)?;
+            
+            match merge_env_files(&executor.env_merger, environment_opt, &all_extensions) {
                 Ok(merged_env) => {
                     if !merged_env.variables.is_empty() || !merged_env.header_comments.is_empty() {
                         if let Err(e) = write_merged_env(&merged_env, &env_file_path.to_string_lossy()) {
@@ -297,9 +476,12 @@ fn create_build_structure(executor: &BuildExecutor, combinations: &[BuildCombina
                 details: format!("Failed to initialize file copier: {}", e),
             })?;
 
+        // Resolve all extensions for file copying
+        let all_extensions = resolve_all_extensions(&executor.config, &combo.extensions, &combo.combo_names)?;
+        
         if let Err(e) = file_copier.copy_additional_files(
             combo.environment.as_deref(),
-            &combo.extensions,
+            &all_extensions,
             &output_path,
         ) {
             println!("Warning: Failed to copy additional files for {}: {}", combo.output_dir, e);
@@ -309,10 +491,58 @@ fn create_build_structure(executor: &BuildExecutor, combinations: &[BuildCombina
     Ok(())
 }
 
+/// Serialize YAML with proper formatting and clean null values
+fn serialize_yaml_with_proper_indentation(value: &serde_yaml::Value) -> Result<String> {
+    // Use yaml_rust for better formatting control
+    let mut out_str = String::new();
+    {
+        let mut emitter = yaml_rust::YamlEmitter::new(&mut out_str);
+        
+        // Convert serde_yaml::Value to yaml_rust::Yaml
+        let yaml_str = serde_yaml::to_string(value)
+            .map_err(|e| YamlError::SerializationError {
+                details: e.to_string(),
+            })?;
+            
+        let docs = yaml_rust::YamlLoader::load_from_str(&yaml_str)
+            .map_err(|e| YamlError::SerializationError {
+                details: format!("Failed to parse YAML for formatting: {}", e),
+            })?;
+            
+        if let Some(doc) = docs.first() {
+            emitter.dump(doc)
+                .map_err(|e| YamlError::SerializationError {
+                    details: format!("Failed to emit YAML: {}", e),
+                })?;
+        }
+    }
+    
+    // Clean up null values (~ symbols)
+    let yaml_string = clean_yaml_null_values(out_str);
+    
+    Ok(yaml_string)
+}
+
+/// Clean YAML string from null values (~ symbols) in volumes sections
+fn clean_yaml_null_values(yaml_content: String) -> String {
+    use regex::Regex;
+    
+    // Replace patterns like "volume_name: ~" or "volume_name: null" with "volume_name:"
+    let re = Regex::new(r"(\s+\w+):\s*(?:~|null)\s*$").unwrap();
+    let cleaned = re.replace_all(&yaml_content, "$1:");
+    
+    // Also handle inline null values in volumes sections
+    let re2 = Regex::new(r"(\s+\w+):\s*(?:~|null)\s*\n").unwrap();
+    let cleaned2 = re2.replace_all(&cleaned, "$1:\n");
+    
+    cleaned2.to_string()
+}
+
 /// Structure representing a build combination
 #[derive(Debug)]
 struct BuildCombination {
     pub environment: Option<String>,
     pub extensions: Vec<String>,
+    pub combo_names: Vec<String>,
     pub output_dir: String,
 }

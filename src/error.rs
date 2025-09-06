@@ -60,6 +60,12 @@ pub enum ValidationError {
     #[error("Extension '{name}' not found in any extensions directory. Available directories: {available_dirs:?}")]
     ExtensionNotFound { name: String, available_dirs: Vec<String> },
     
+    #[error("Combo '{combo_name}' not found in combo definitions. Available combos: {available_combos:?}")]
+    ComboNotFound { combo_name: String, available_combos: Vec<String> },
+    
+    #[error("Invalid combo definition for '{combo_name}': {details}")]
+    InvalidComboDefinition { combo_name: String, details: String },
+    
     #[error("Configuration must specify at least one environment or extension to build")]
     NoTargetsSpecified,
     

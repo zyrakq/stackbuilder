@@ -145,10 +145,10 @@ services:
     networks:
       - frontend
 volumes:
-  web_data: ~
-  node_modules: ~
-  postgres_data: ~
-  redis_data: ~
+  web_data:
+  node_modules:
+  postgres_data:
+  redis_data:
   production_postgres_data:
     external: true
   production_ssl_certs:
