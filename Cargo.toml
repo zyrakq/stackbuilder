@@ -5,7 +5,6 @@ edition = "2021"
 description = "A powerful CLI tool for building Docker Compose files from modular components with multi-environment support and extension system"
 authors = ["Zyrakq <serg.shehov@tutanota.com>"]
 license = "MIT OR Apache-2.0"
-license-file = "LICENSE-MIT"
 repository = "https://github.com/zyrakq/stackbuilder"
 homepage = "https://github.com/zyrakq/stackbuilder"
 documentation = "https://github.com/zyrakq/stackbuilder/blob/main/README.md"

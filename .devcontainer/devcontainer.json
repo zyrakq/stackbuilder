@@ -21,7 +21,7 @@
     "features": {
         "ghcr.io/bartventer/arch-devcontainer-features/common-utils:1": {
             "username": "vscode",
-            "additionalPackages": "base-devel",
+            "additionalPackages": "base-devel,mingw-w64-gcc,aarch64-linux-gnu-gcc,zig",
             "installZsh": true,
             "installOhMyZsh": true,
             "configureZshAsDefaultShell": true
