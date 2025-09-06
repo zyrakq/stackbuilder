@@ -1,0 +1,109 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Beautiful gradient for containers -->
+    <linearGradient id="containerGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667EEA;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#764BA2;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#F093FB;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- Accent gradient for building elements -->
+    <linearGradient id="accentGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FF6B6B;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#FFE66D;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- Background gradient -->
+    <radialGradient id="backgroundGradient" cx="50%" cy="50%">
+      <stop offset="0%" style="stop-color:#2C3E50;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1A252F;stop-opacity:1" />
+    </radialGradient>
+    
+    <!-- Glow effect -->
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge> 
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    
+    <!-- Shadow -->
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="128" height="128" rx="24" ry="24" fill="url(#backgroundGradient)"/>
+  
+  <!-- Main Docker container stack -->
+  <g filter="url(#shadow)">
+    <!-- Bottom container (base) -->
+    <rect x="24" y="80" width="80" height="24" rx="6" ry="6" 
+          fill="url(#containerGradient)" filter="url(#glow)"/>
+    <!-- Container ports/details -->
+    <rect x="28" y="84" width="4" height="16" rx="2" fill="rgba(255,255,255,0.3)"/>
+    <rect x="34" y="84" width="4" height="16" rx="2" fill="rgba(255,255,255,0.2)"/>
+    <rect x="40" y="84" width="4" height="16" rx="2" fill="rgba(255,255,255,0.3)"/>
+    <text x="64" y="95" text-anchor="middle" fill="white" font-family="monospace" font-size="8" font-weight="bold">STACK</text>
+    
+    <!-- Middle container (environment) -->
+    <rect x="32" y="50" width="64" height="20" rx="5" ry="5" 
+          fill="url(#containerGradient)" filter="url(#glow)" opacity="0.9"/>
+    <rect x="35" y="53" width="3" height="14" rx="1" fill="rgba(255,255,255,0.3)"/>
+    <rect x="40" y="53" width="3" height="14" rx="1" fill="rgba(255,255,255,0.2)"/>
+    <rect x="45" y="53" width="3" height="14" rx="1" fill="rgba(255,255,255,0.3)"/>
+    <text x="64" y="63" text-anchor="middle" fill="white" font-family="monospace" font-size="7">ENV</text>
+    
+    <!-- Top container (extensions) -->
+    <rect x="40" y="24" width="48" height="16" rx="4" ry="4" 
+          fill="url(#containerGradient)" filter="url(#glow)" opacity="0.8"/>
+    <rect x="42" y="26" width="2" height="12" rx="1" fill="rgba(255,255,255,0.3)"/>
+    <rect x="46" y="26" width="2" height="12" rx="1" fill="rgba(255,255,255,0.2)"/>
+    <rect x="50" y="26" width="2" height="12" rx="1" fill="rgba(255,255,255,0.3)"/>
+    <text x="64" y="34" text-anchor="middle" fill="white" font-family="monospace" font-size="6">EXT</text>
+  </g>
+  
+  <!-- Building/Assembly arrows -->
+  <g stroke="url(#accentGradient)" stroke-width="3" fill="none" filter="url(#glow)">
+    <!-- Arrow from top to middle -->
+    <path d="M 64 40 L 64 47 M 60 43 L 64 47 L 68 43" stroke-linecap="round"/>
+    <!-- Arrow from middle to bottom -->
+    <path d="M 64 70 L 64 77 M 60 73 L 64 77 L 68 73" stroke-linecap="round"/>
+  </g>
+  
+  <!-- Modular components floating around -->
+  
+  <!-- Left side components -->
+  <rect x="8" y="32" width="16" height="12" rx="3" fill="url(#accentGradient)" opacity="0.8" filter="url(#glow)"/>
+  <circle cx="12" cy="36" r="1" fill="white" opacity="0.8"/>
+  <circle cx="16" cy="36" r="1" fill="white" opacity="0.6"/>
+  <circle cx="20" cy="36" r="1" fill="white" opacity="0.8"/>
+  
+  <rect x="8" y="60" width="16" height="12" rx="3" fill="url(#accentGradient)" opacity="0.7" filter="url(#glow)"/>
+  <rect x="10" y="62" width="12" height="2" rx="1" fill="white" opacity="0.6"/>
+  <rect x="10" y="66" width="12" height="2" rx="1" fill="white" opacity="0.8"/>
+  
+  <!-- Right side components -->
+  <rect x="104" y="32" width="16" height="12" rx="3" fill="url(#accentGradient)" opacity="0.8" filter="url(#glow)"/>
+  <rect x="106" y="34" width="3" height="8" rx="1" fill="white" opacity="0.7"/>
+  <rect x="111" y="34" width="3" height="8" rx="1" fill="white" opacity="0.5"/>
+  <rect x="116" y="34" width="1" height="8" rx="0.5" fill="white" opacity="0.7"/>
+  
+  <rect x="104" y="60" width="16" height="12" rx="3" fill="url(#accentGradient)" opacity="0.7" filter="url(#glow)"/>
+  <polygon points="108,64 112,66 108,68" fill="white" opacity="0.8"/>
+  <polygon points="114,64 118,66 114,68" fill="white" opacity="0.6"/>
+  
+  <!-- Connection lines showing assembly -->
+  <path d="M 24 38 Q 30 42 40 32" stroke="#FFE66D" stroke-width="2" opacity="0.6" fill="none" stroke-dasharray="2,2"/>
+  <path d="M 104 38 Q 98 42 88 32" stroke="#FFE66D" stroke-width="2" opacity="0.6" fill="none" stroke-dasharray="2,2"/>
+  <path d="M 24 66 Q 30 62 32 58" stroke="#FFE66D" stroke-width="2" opacity="0.6" fill="none" stroke-dasharray="2,2"/>
+  <path d="M 104 66 Q 98 62 96 58" stroke="#FFE66D" stroke-width="2" opacity="0.6" fill="none" stroke-dasharray="2,2"/>
+  
+  <!-- Decorative particles -->
+  <circle cx="20" cy="20" r="2" fill="#FF6B6B" opacity="0.7" filter="url(#glow)"/>
+  <circle cx="108" cy="20" r="2" fill="#FFE66D" opacity="0.7" filter="url(#glow)"/>
+  <circle cx="20" cy="108" r="2" fill="#FFE66D" opacity="0.7" filter="url(#glow)"/>
+  <circle cx="108" cy="108" r="2" fill="#FF6B6B" opacity="0.7" filter="url(#glow)"/>
+</svg>

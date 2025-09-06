@@ -4,6 +4,12 @@
   "git.scanRepositories": [],
   "git.autoRepositoryDetection": false,
   "files.associations": {
+    "LICENSE-APACHE": "plaintext",
+    "LICENSE-MIT": "plaintext",
     ".gitmessage": "plaintext"
+  },
+  "markdownlint.config": {
+    "MD033": false,
+    "MD041": false
   }
 }
