@@ -18,7 +18,6 @@ pub enum FilePriority {
 #[derive(Debug, Clone)]
 pub struct FileInfo {
     pub source_path: PathBuf,
-    pub relative_path: PathBuf,
     pub priority: FilePriority,
     pub source_component: String,
 }
@@ -63,7 +62,7 @@ impl FileCopier {
         
         // 1. Discover base files (lowest priority)
         self.discover_files(
-            &Path::new(&self.config.paths.base_dir),
+            Path::new(&self.config.paths.base_dir),
             FilePriority::Base,
             "base",
             &mut file_map,
@@ -166,7 +165,6 @@ impl FileCopier {
 
                 let file_info = FileInfo {
                     source_path: path.clone(),
-                    relative_path: relative_path.clone(),
                     priority,
                     source_component: component_name.to_string(),
                 };
@@ -277,7 +275,6 @@ impl FileCopier {
         // Preserve permissions on Unix systems
         #[cfg(unix)]
         {
-            use std::os::unix::fs::PermissionsExt;
             if let Ok(metadata) = fs::metadata(&file_info.source_path) {
                 let permissions = metadata.permissions();
                 let _ = fs::set_permissions(&dest_path, permissions);

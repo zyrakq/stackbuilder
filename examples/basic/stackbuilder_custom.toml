@@ -1,0 +1,12 @@
+[paths]
+components_dir = "./components"
+base_dir = "base"
+environments_dir = "environments"
+extensions_dirs = ["extensions"]
+build_dir = "./build"
+
+[build]
+environments = ["devcontainer", "internal"]
+extensions = ["oidc", "guard"]
+preserve_env_files = true
+env_file_patterns = [".env", ".env.local", ".env.production", ".env.test"]

@@ -27,6 +27,8 @@ Defines the build rules and configurations.
 - `copy_env_example` (boolean, default: `true`): Enable merging of .env.example files from components into output directories
 - `copy_additional_files` (boolean, default: `true`): Enable copying of additional files (configs, scripts, certificates) from components with priority-based overriding
 - `exclude_patterns` (array of strings, default: `["docker-compose.yml", ".env.example", "*.tmp", ".git*", "node_modules", "*.log"]`): Glob patterns for files to exclude from additional file copying
+- `preserve_env_files` (boolean, default: `true`): Enable intelligent preservation of existing .env files during build directory cleanup
+- `env_file_patterns` (array of strings, default: `[".env", ".env.local", ".env.production"]`): Patterns for .env files to preserve during smart cleanup
 
 #### Named Combos
 
@@ -153,6 +155,10 @@ pub struct Build {
     pub copy_additional_files: bool,
     #[serde(default = "default_exclude_patterns")]
     pub exclude_patterns: Vec<String>,
+    #[serde(default = "default_preserve_env_files")]
+    pub preserve_env_files: bool,
+    #[serde(default = "default_env_file_patterns")]
+    pub env_file_patterns: Vec<String>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -191,6 +197,14 @@ fn default_exclude_patterns() -> Vec<String> {
         ".git*".to_string(),
         "node_modules".to_string(),
         "*.log".to_string(),
+    ]
+}
+fn default_preserve_env_files() -> bool { true }
+fn default_env_file_patterns() -> Vec<String> {
+    vec![
+        ".env".to_string(),
+        ".env.local".to_string(),
+        ".env.production".to_string(),
     ]
 }
 ```
@@ -515,12 +529,8 @@ Place additional files alongside `docker-compose.yml` files in component directo
 - Symbolic links are followed and the target files are copied
 - Binary files are supported and copied without modification
 - Large files may impact build performance - consider using exclusion patterns
-environments = ["dev", "prod"]
-extensions = ["oidc", "monitoring"]
 
-```log
-
-### File Locations
+### .env.example File Locations
 
 Place `.env.example` files alongside `docker-compose.yml` files in:
 
@@ -528,9 +538,145 @@ Place `.env.example` files alongside `docker-compose.yml` files in:
 - `components/environments/{env}/.env.example` - Environment-specific variables
 - `components/extensions/{ext}/.env.example` - Extension-specific variables
 
-### Usage Notes
+### .env.example Processing Notes
 
 - Variables with spaces or special characters are automatically quoted
 - Empty variables are preserved with empty quotes: `VAR=""`
 - Comments starting with `#` are preserved from all source files
 - Output `.env.example` files are placed in the same directories as generated `docker-compose.yml` files
+
+## Intelligent .env Files Preservation
+
+Stackbuilder includes an intelligent build directory cleanup system that preserves existing `.env` files during rebuilds when the `preserve_env_files` option is enabled (default: `true`).
+
+### Smart Cleanup Process
+
+When rebuilding, stackbuilder performs the following intelligent cleanup workflow:
+
+1. **Scan Phase**: Scan the entire build directory for existing `.env` files matching configured patterns
+2. **Preservation Phase**: Create temporary backup of found `.env` files with metadata (original paths, content, detected environment/extension info)
+3. **Cleanup Phase**: Completely remove the build directory to ensure clean rebuild
+4. **Restoration Phase**: Restore `.env` files to appropriate locations in the new build structure using intelligent path mapping
+
+### Path Mapping Intelligence
+
+The system uses heuristics to map old `.env` file locations to new build structure:
+
+- **Environment Detection**: Analyze file paths to detect environment names (e.g., `dev`, `production`, `staging`)
+- **Extension Detection**: Detect extension names from directory structure (e.g., `auth`, `monitoring`, `oidc`)
+- **Confidence Scoring**: Calculate mapping confidence based on path similarity and component matching
+- **Fallback Strategy**: Use fallback locations for low-confidence mappings to prevent data loss
+
+### Configuration Options
+
+#### Enable .env preservation (default)
+
+```toml
+[build]
+preserve_env_files = true
+env_file_patterns = [".env", ".env.local", ".env.production"]
+```
+
+#### Disable .env preservation
+
+```toml
+[build]
+preserve_env_files = false
+```
+
+#### Custom .env file patterns
+
+```toml
+[build]
+preserve_env_files = true
+env_file_patterns = [
+    ".env",
+    ".env.local",
+    ".env.development",
+    ".env.staging",
+    ".env.production",
+    ".env.test"
+]
+```
+
+### Restoration Examples
+
+#### Scenario 1: Environment Renaming
+
+```log
+# Before: dev → development
+build/dev/.env → build/development/.env
+
+# Before: prod → production
+build/prod/auth/.env → build/production/auth/.env
+```
+
+#### Scenario 2: Extension Changes
+
+```log
+# Before: security combo → individual extensions
+build/dev/security/.env → build/dev/oidc/.env (first extension in combo)
+
+# Before: individual → combo
+build/dev/auth/.env → build/dev/security/.env (combo containing auth)
+```
+
+#### Scenario 3: Fallback Handling
+
+```log
+# Before: unknown structure → fallback location
+build/unknown/.env → build/.env.backup.unknown
+```
+
+### Build Log Output
+
+During intelligent cleanup, stackbuilder provides detailed logging:
+
+```log
+Starting intelligent build directory cleanup with .env preservation
+Found .env file: dev/auth/.env (env: Some("dev"), ext: ["auth"])
+Found .env file: production/base/.env.production (env: Some("production"), ext: [])
+Scanned build directory, found 2 .env files
+✓ Preserved 2 .env files to backup location
+✓ Removed existing build directory
+✓ Created clean build directory
+
+Restoring preserved .env files to new build structure
+Generated 2 path mappings for .env restoration
+✓ Restored .env file to: build/development/auth/.env
+✓ Restored .env file to: build/production/base/.env.production
+Restoration completed: 2 restored, 0 fallback placements
+✓ Cleaned up temporary backup directory
+```
+
+### Security Considerations
+
+- **Backup Security**: Temporary backups are stored in `.stackbuilder_env_backup/` (automatically cleaned up)
+- **Production Files**: Critical production `.env` files are preserved even during major configuration changes
+- **File Permissions**: Original file permissions are maintained during restoration
+- **Conflict Resolution**: Existing files with same content are not overwritten; conflicts create backup copies
+
+### Limitations and Edge Cases
+
+- **Path Ambiguity**: When mapping confidence is low, files are placed in fallback locations with descriptive names
+- **Multiple Matches**: If multiple valid restoration paths exist, the highest confidence mapping is used
+- **Missing Structure**: If target structure doesn't exist, fallback paths are created automatically
+- **Large .env Files**: Very large .env files may impact build performance (no size limit enforced)
+
+### Best Practices
+
+1. **Consistent Naming**: Use consistent environment and extension naming for best mapping results
+2. **Review Fallbacks**: Check build logs for fallback placements and relocate files manually if needed
+3. **Backup Strategy**: Maintain external backups of critical `.env` files for additional safety
+4. **Test Rebuilds**: Test configuration changes on non-production environments first
+
+### Disabling Preservation
+
+For clean builds without .env preservation:
+
+```toml
+[build]
+preserve_env_files = false
+```
+
+This performs standard cleanup (complete removal) without .env file scanning or restoration.

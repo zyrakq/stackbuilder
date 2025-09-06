@@ -47,6 +47,10 @@ pub struct Build {
     pub copy_additional_files: bool,
     #[serde(default = "default_exclude_patterns")]
     pub exclude_patterns: Vec<String>,
+    #[serde(default = "default_preserve_env_files")]
+    pub preserve_env_files: bool,
+    #[serde(default = "default_env_file_patterns")]
+    pub env_file_patterns: Vec<String>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -72,6 +76,8 @@ impl Default for Build {
             copy_env_example: default_copy_env_example(),
             copy_additional_files: default_copy_additional_files(),
             exclude_patterns: default_exclude_patterns(),
+            preserve_env_files: default_preserve_env_files(),
+            env_file_patterns: default_env_file_patterns(),
         }
     }
 }
@@ -120,6 +126,18 @@ fn default_exclude_patterns() -> Vec<String> {
         ".git*".to_string(),
         "node_modules".to_string(),
         "*.log".to_string(),
+    ]
+}
+
+fn default_preserve_env_files() -> bool {
+    true
+}
+
+fn default_env_file_patterns() -> Vec<String> {
+    vec![
+        ".env".to_string(),
+        ".env.local".to_string(),
+        ".env.production".to_string(),
     ]
 }
 
@@ -339,32 +357,6 @@ pub fn resolve_paths(config: &mut Config) -> Result<()> {
     Ok(())
 }
 
-// Discover available environments from environments_dir
-pub fn discover_environments(config: &Config) -> Result<Vec<String>> {
-    let envs_path = std::path::Path::new(&config.paths.environments_dir);
-    let mut environments = Vec::new();
-
-    if envs_path.exists() {
-        for entry in std::fs::read_dir(envs_path)
-            .map_err(|e| FileSystemError::DirectoryReadFailed {
-                path: envs_path.to_path_buf(),
-                source: e,
-            })? {
-            let entry = entry.map_err(|e| FileSystemError::DirectoryReadFailed {
-                path: envs_path.to_path_buf(),
-                source: e,
-            })?;
-            if entry.path().is_dir() {
-                if let Some(name) = entry.file_name().to_str() {
-                    environments.push(name.to_string());
-                }
-            }
-        }
-    }
-
-    println!("Discovered environments: {:?}", environments);
-    Ok(environments)
-}
 
 // Discover available extensions from extensions_dirs
 pub fn discover_extensions(config: &Config) -> Result<Vec<String>> {
@@ -418,31 +410,6 @@ pub fn resolve_combo_extensions(config: &Config, combo_names: &[String]) -> Resu
     Ok(resolved_extensions)
 }
 
-// Get all extensions for an environment target (combining direct extensions and combo extensions)
-pub fn get_target_extensions(config: &Config, env_target: &EnvironmentTarget) -> Result<Vec<String>> {
-    let mut all_extensions = Vec::new();
-    
-    // Add direct extensions
-    if let Some(ref extensions) = env_target.extensions {
-        for ext in extensions {
-            if !all_extensions.contains(ext) {
-                all_extensions.push(ext.clone());
-            }
-        }
-    }
-    
-    // Add combo extensions
-    if let Some(ref combos) = env_target.combos {
-        let combo_extensions = resolve_combo_extensions(config, combos)?;
-        for ext in combo_extensions {
-            if !all_extensions.contains(&ext) {
-                all_extensions.push(ext);
-            }
-        }
-    }
-    
-    Ok(all_extensions)
-}
 
 // Get combo names for an environment target
 pub fn get_target_combo_names(env_target: &EnvironmentTarget) -> Vec<String> {

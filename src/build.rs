@@ -1,11 +1,11 @@
 use std::fs;
 use std::path::Path;
-use yaml_rust::{YamlEmitter, YamlLoader};
 
 use crate::config;
 use crate::merger::{ComposeMerger, merge_compose_files};
 use crate::env_merger::{EnvMerger, merge_env_files, write_merged_env};
 use crate::file_copier::FileCopier;
+use crate::build_cleaner::BuildCleaner;
 use crate::error::{Result, BuildError, FileSystemError, YamlError, ValidationError};
 
 /// Structure for managing build process execution
@@ -70,15 +70,12 @@ pub fn execute_build() -> Result<()> {
 
 /// Determine all build combinations based on configuration
 fn determine_build_combinations(config: &config::Config) -> Result<Vec<BuildCombination>> {
-    let mut combinations = Vec::new();
-
-    // Check if we have new targets configuration
-    if let Some(ref targets) = config.build.targets {
-        combinations = resolve_target_combinations(config, targets)?;
+    let combinations = if let Some(ref targets) = config.build.targets {
+        resolve_target_combinations(config, targets)?
     } else {
         // Legacy mode: use old logic for backwards compatibility
-        combinations = resolve_legacy_combinations(config)?;
-    }
+        resolve_legacy_combinations(config)?
+    };
 
     if combinations.is_empty() {
         return Err(BuildError::BuildProcessFailed {
@@ -106,7 +103,7 @@ fn resolve_target_combinations(config: &config::Config, targets: &config::BuildT
 
     if environments.is_empty() {
         // No environments, create extension-only combinations
-        for (_env_name, env_target) in &targets.environment_configs {
+        for env_target in targets.environment_configs.values() {
             let direct_extensions = env_target.extensions.as_ref().map_or_else(Vec::new, |ext| ext.clone());
             let combo_names = config::get_target_combo_names(env_target);
             
@@ -164,11 +161,7 @@ fn resolve_target_combinations(config: &config::Config, targets: &config::BuildT
                 
                 // Create combinations for individual extensions
                 for ext in &direct_extensions {
-                    let output_dir = if environments.len() == 1 {
-                        format!("{}/{}", env, ext)
-                    } else {
-                        format!("{}/{}", env, ext)
-                    };
+                    let output_dir = format!("{}/{}", env, ext);
                     
                     combinations.push(BuildCombination {
                         environment: Some(env.clone()),
@@ -186,11 +179,7 @@ fn resolve_target_combinations(config: &config::Config, targets: &config::BuildT
                             available_combos: config.build.combos.keys().cloned().collect(),
                         })?;
                     
-                    let output_dir = if environments.len() == 1 {
-                        format!("{}/{}", env, combo_name)
-                    } else {
-                        format!("{}/{}", env, combo_name)
-                    };
+                    let output_dir = format!("{}/{}", env, combo_name);
                     
                     combinations.push(BuildCombination {
                         environment: Some(env.clone()),
@@ -347,24 +336,6 @@ fn resolve_legacy_combinations(config: &config::Config) -> Result<Vec<BuildCombi
     Ok(combinations)
 }
 
-/// Format output directory name for combinations
-fn format_combo_output_dir(extensions: &[String], combo_names: &[String]) -> String {
-    let mut parts = Vec::new();
-    
-    if !extensions.is_empty() {
-        parts.extend(extensions.iter().cloned());
-    }
-    
-    if !combo_names.is_empty() {
-        parts.extend(combo_names.iter().cloned());
-    }
-    
-    if parts.is_empty() {
-        "base".to_string()
-    } else {
-        parts.join("+")
-    }
-}
 
 /// Resolve all extensions from direct extensions and combo names
 fn resolve_all_extensions(config: &config::Config, direct_extensions: &[String], combo_names: &[String]) -> Result<Vec<String>> {
@@ -394,19 +365,23 @@ fn resolve_all_extensions(config: &config::Config, direct_extensions: &[String],
 fn create_build_structure(executor: &BuildExecutor, combinations: &[BuildCombination]) -> Result<()> {
     let build_dir = Path::new(&executor.config.paths.build_dir);
 
-    // Clean build directory
-    if build_dir.exists() {
-        fs::remove_dir_all(build_dir)
-            .map_err(|e| BuildError::BuildDirectoryCleanupFailed {
-                path: build_dir.to_path_buf(),
-                source: e,
-            })?;
-    }
-    fs::create_dir_all(build_dir)
-        .map_err(|e| BuildError::BuildDirectoryCreationFailed {
-            path: build_dir.to_path_buf(),
-            source: e,
+    // Smart cleanup with .env preservation
+    let cleaner = BuildCleaner::new(
+        build_dir,
+        executor.config.build.preserve_env_files,
+        executor.config.build.env_file_patterns.clone(),
+    );
+
+    cleaner.clean_build_directory()
+        .map_err(|e| BuildError::BuildProcessFailed {
+            details: format!("Failed to clean build directory: {}", e),
         })?;
+
+    // Collect new structure paths for .env restoration
+    let new_structure: Vec<String> = combinations
+        .iter()
+        .map(|combo| combo.output_dir.clone())
+        .collect();
 
     for combo in combinations {
         println!("Processing combination: {:?}", combo.output_dir);
@@ -487,6 +462,12 @@ fn create_build_structure(executor: &BuildExecutor, combinations: &[BuildCombina
             println!("Warning: Failed to copy additional files for {}: {}", combo.output_dir, e);
         }
     }
+
+    // Restore preserved .env files after creating new structure
+    cleaner.restore_env_files(&new_structure)
+        .map_err(|e| BuildError::BuildProcessFailed {
+            details: format!("Failed to restore .env files: {}", e),
+        })?;
 
     Ok(())
 }

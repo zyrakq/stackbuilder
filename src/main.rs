@@ -6,6 +6,7 @@ mod config;
 mod init;
 mod build;
 mod file_copier;
+mod build_cleaner;
 
 #[cfg(test)]
 mod tests;

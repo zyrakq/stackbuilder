@@ -16,28 +16,26 @@ pub fn run_init(args: &InitArgs) -> Result<()> {
         // Create default config
         let default_config = config::Config::default();
         let toml_content = toml::to_string(&default_config)
-            .map_err(|e| ConfigError::toml_serialize_error(e))?;
+            .map_err(ConfigError::toml_serialize_error)?;
         fs::write(CONFIG_FILE, toml_content)
             .map_err(|e| FileSystemError::FileWriteFailed {
                 path: config_path.to_path_buf(),
                 source: e,
             })?;
         println!("Created default configuration file: {}", CONFIG_FILE);
+    } else if !args.force {
+        println!("Configuration file already exists: {}", CONFIG_FILE);
     } else {
-        if !args.force {
-            println!("Configuration file already exists: {}", CONFIG_FILE);
-        } else {
-            println!("Overwriting existing configuration file: {}", CONFIG_FILE);
-            let default_config = config::Config::default();
-            let toml_content = toml::to_string(&default_config)
-                .map_err(|e| ConfigError::toml_serialize_error(e))?;
-            fs::write(CONFIG_FILE, toml_content)
-                .map_err(|e| FileSystemError::FileWriteFailed {
-                    path: config_path.to_path_buf(),
-                    source: e,
-                })?;
-            println!("Overwrote configuration file: {}", CONFIG_FILE);
-        }
+        println!("Overwriting existing configuration file: {}", CONFIG_FILE);
+        let default_config = config::Config::default();
+        let toml_content = toml::to_string(&default_config)
+            .map_err(ConfigError::toml_serialize_error)?;
+        fs::write(CONFIG_FILE, toml_content)
+            .map_err(|e| FileSystemError::FileWriteFailed {
+                path: config_path.to_path_buf(),
+                source: e,
+            })?;
+        println!("Overwrote configuration file: {}", CONFIG_FILE);
     }
 
     // Step 2: Read the config

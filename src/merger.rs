@@ -122,10 +122,6 @@ pub fn merge_compose_files(
     }.into())
 }
 
-/// Parse extension combination string like "oidc+guard" into vec of strings
-pub fn parse_extension_combination(combo: &str) -> Vec<String> {
-    combo.split('+').map(|s| s.trim().to_string()).collect()
-}
 
 /// Resolve the order of files to merge based on environment and extensions
 pub fn resolve_merge_order(
@@ -165,28 +161,4 @@ pub fn resolve_merge_order(
     }
 
     Ok(file_paths)
-}
-
-/// Build file paths from components
-pub fn build_file_paths(
-    root_dir: &str,
-    environment: Option<&str>,
-    extensions: &[String],
-) -> Result<Vec<String>> {
-    let mut paths = Vec::new();
-
-    // Base path
-    paths.push(format!("{}/base/docker-compose.yml", root_dir));
-
-    // Environment path
-    if let Some(env) = environment {
-        paths.push(format!("{}/environments/{}/docker-compose.yml", root_dir, env));
-    }
-
-    // Extension paths
-    for ext in extensions {
-        paths.push(format!("{}/extensions/{}/docker-compose.yml", root_dir, ext));
-    }
-
-    Ok(paths)
 }
