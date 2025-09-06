@@ -1,16 +1,16 @@
----
-version: "3.8"
+version: '3.8'
 services:
+  # Development-specific overrides
   web:
-    image: "nginx:1.21-alpine"
+    image: nginx:1.21-alpine
     ports:
       - "80:80"
       - "443:443"
-      - "8080:80"
+      - "8080:80" # Different port for development
     volumes:
-      - "./nginx.conf:/etc/nginx/nginx.conf:ro"
-      - "web_data:/var/www/html"
-      - "./nginx-dev.conf:/etc/nginx/nginx.conf:ro"
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - web_data:/var/www/html
+      - ./nginx-dev.conf:/etc/nginx/nginx.conf:ro
     depends_on:
       - app
     restart: unless-stopped
@@ -19,15 +19,16 @@ services:
       - backend
     environment:
       - DEBUG=true
+  # Application backend
   app:
-    image: "node:16-alpine"
+    image: node:16-alpine
     working_dir: /app
     volumes:
-      - "./app:/app"
-      - "node_modules:/app/node_modules"
-      - "./app:/app"
-      - "./app/src:/app/src:cached"
-      - "node_modules:/app/node_modules"
+      - ./app:/app
+      - node_modules:/app/node_modules
+      - ./app:/app
+      - ./app/src:/app/src:cached # Hot reload support
+      - node_modules:/app/node_modules
     environment:
       - NODE_ENV=production
       - PORT=3000
@@ -44,9 +45,10 @@ services:
       - backend
     command: npm run dev
     ports:
-      - "3000:3000"
+      - "3000:3000" # Expose for direct access in dev
+  # Database service
   database:
-    image: "postgres:13-alpine"
+    image: postgres:13-alpine
     environment:
       - POSTGRES_DB=appdb
       - POSTGRES_USER=appuser
@@ -55,81 +57,86 @@ services:
       - POSTGRES_USER=devuser
       - POSTGRES_PASSWORD=devpass
     volumes:
-      - "postgres_data:/var/lib/postgresql/data"
-      - "./init.sql:/docker-entrypoint-initdb.d/init.sql:ro"
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     expose:
       - "5432"
     restart: unless-stopped
     networks:
       - backend
     ports:
-      - "5432:5432"
+      - "5432:5432" # Expose for development tools
+  # Redis cache
   cache:
-    image: "redis:6-alpine"
+    image: redis:6-alpine
     command: redis-server --appendonly yes
     volumes:
-      - "redis_data:/data"
+      - redis_data:/data
     expose:
       - "6379"
     restart: unless-stopped
     networks:
       - backend
     ports:
-      - "6379:6379"
+      - "6379:6379" # Expose for development tools
+  # Development-only services
   mailhog:
-    image: "mailhog/mailhog:latest"
+    image: mailhog/mailhog:latest
     ports:
-      - "1025:1025"
-      - "8025:8025"
+      - "1025:1025" # SMTP
+      - "8025:8025" # Web UI
     networks:
       - backend
+  # Keycloak identity and access management
   keycloak:
-    image: "quay.io/keycloak/keycloak:20.0"
+    image: quay.io/keycloak/keycloak:20.0
     command: start-dev
     environment:
       - KEYCLOAK_ADMIN=admin
-      - "KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_PASSWORD:-admin123}"
+      - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_PASSWORD:-admin123}
       - KC_DB=postgres
-      - "KC_DB_URL=jdbc:postgresql://keycloak-db:5432/keycloak"
+      - KC_DB_URL=jdbc:postgresql://keycloak-db:5432/keycloak
       - KC_DB_USERNAME=keycloak
-      - "KC_DB_PASSWORD=${KEYCLOAK_DB_PASSWORD:-keycloak123}"
+      - KC_DB_PASSWORD=${KEYCLOAK_DB_PASSWORD:-keycloak123}
       - KC_HOSTNAME=localhost
       - KC_HTTP_ENABLED=true
       - KC_PROXY=edge
     ports:
       - "8180:8080"
     volumes:
-      - "./keycloak/themes:/opt/keycloak/themes:ro"
-      - "./keycloak/imports:/opt/keycloak/data/import:ro"
+      - ./keycloak/themes:/opt/keycloak/themes:ro
+      - ./keycloak/imports:/opt/keycloak/data/import:ro
     depends_on:
       - keycloak-db
     networks:
       - auth
       - frontend
     restart: unless-stopped
+  # Keycloak database
   keycloak-db:
-    image: "postgres:13-alpine"
+    image: postgres:13-alpine
     environment:
       - POSTGRES_DB=keycloak
       - POSTGRES_USER=keycloak
-      - "POSTGRES_PASSWORD=${KEYCLOAK_DB_PASSWORD:-keycloak123}"
+      - POSTGRES_PASSWORD=${KEYCLOAK_DB_PASSWORD:-keycloak123}
     volumes:
-      - "keycloak_db_data:/var/lib/postgresql/data"
+      - keycloak_db_data:/var/lib/postgresql/data
     networks:
       - auth
     restart: unless-stopped
+  # OAuth2 Proxy for application protection
   oauth2-proxy:
-    image: "quay.io/oauth2-proxy/oauth2-proxy:v7.4.0"
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.4.0
     command:
-      - "--config=/etc/oauth2-proxy.cfg"
+      - --config=/etc/oauth2-proxy.cfg
     ports:
       - "4180:4180"
     volumes:
-      - "./oauth2-proxy.cfg:/etc/oauth2-proxy.cfg:ro"
+      - ./oauth2-proxy.cfg:/etc/oauth2-proxy.cfg:ro
     environment:
-      - "OAUTH2_PROXY_CLIENT_ID=${OAUTH2_CLIENT_ID}"
-      - "OAUTH2_PROXY_CLIENT_SECRET=${OAUTH2_CLIENT_SECRET}"
-      - "OAUTH2_PROXY_COOKIE_SECRET=${OAUTH2_COOKIE_SECRET}"
+      - OAUTH2_PROXY_CLIENT_ID=${OAUTH2_CLIENT_ID}
+      - OAUTH2_PROXY_CLIENT_SECRET=${OAUTH2_CLIENT_SECRET}
+      - OAUTH2_PROXY_COOKIE_SECRET=${OAUTH2_COOKIE_SECRET}
     depends_on:
       - keycloak
     networks:
@@ -137,28 +144,30 @@ services:
       - frontend
       - backend
     restart: unless-stopped
+  # LDAP server for enterprise integration
   openldap:
-    image: "osixia/openldap:1.5.0"
+    image: osixia/openldap:1.5.0
     environment:
       - LDAP_ORGANISATION=Example Corp
       - LDAP_DOMAIN=example.com
-      - "LDAP_ADMIN_PASSWORD=${LDAP_ADMIN_PASSWORD:-admin123}"
-      - "LDAP_CONFIG_PASSWORD=${LDAP_CONFIG_PASSWORD:-config123}"
+      - LDAP_ADMIN_PASSWORD=${LDAP_ADMIN_PASSWORD:-admin123}
+      - LDAP_CONFIG_PASSWORD=${LDAP_CONFIG_PASSWORD:-config123}
       - LDAP_READONLY_USER=true
       - LDAP_READONLY_USER_USERNAME=readonly
-      - "LDAP_READONLY_USER_PASSWORD=${LDAP_READONLY_PASSWORD:-readonly123}"
+      - LDAP_READONLY_USER_PASSWORD=${LDAP_READONLY_PASSWORD:-readonly123}
     ports:
       - "389:389"
       - "636:636"
     volumes:
-      - "ldap_data:/var/lib/ldap"
-      - "ldap_config:/etc/ldap/slapd.d"
-      - "./ldap/bootstrap:/container/service/slapd/assets/config/bootstrap/ldif/custom:ro"
+      - ldap_data:/var/lib/ldap
+      - ldap_config:/etc/ldap/slapd.d
+      - ./ldap/bootstrap:/container/service/slapd/assets/config/bootstrap/ldif/custom:ro
     networks:
       - auth
     restart: unless-stopped
+  # LDAP admin interface
   phpldapadmin:
-    image: "osixia/phpldapadmin:0.9.0"
+    image: osixia/phpldapadmin:0.9.0
     environment:
       - PHPLDAPADMIN_LDAP_HOSTS=openldap
       - PHPLDAPADMIN_HTTPS=false
@@ -170,50 +179,54 @@ services:
       - auth
       - frontend
     restart: unless-stopped
+  # FreeRADIUS for network authentication
   freeradius:
-    image: "freeradius/freeradius-server:3.2.0"
+    image: freeradius/freeradius-server:3.2.0
     ports:
-      - "1812:1812/udp"
-      - "1813:1813/udp"
+      - "1812:1812/udp" # Authentication
+      - "1813:1813/udp" # Accounting
     volumes:
-      - "./freeradius/clients.conf:/etc/freeradius/3.0/clients.conf:ro"
-      - "./freeradius/users:/etc/freeradius/3.0/mods-config/files/authorize:ro"
-      - "freeradius_logs:/var/log/freeradius"
+      - ./freeradius/clients.conf:/etc/freeradius/3.0/clients.conf:ro
+      - ./freeradius/users:/etc/freeradius/3.0/mods-config/files/authorize:ro
+      - freeradius_logs:/var/log/freeradius
     networks:
       - auth
     restart: unless-stopped
+  # Vault for secrets management
   vault:
-    image: "vault:1.12.0"
+    image: vault:1.12.0
     cap_add:
       - IPC_LOCK
     environment:
-      - "VAULT_DEV_ROOT_TOKEN_ID=${VAULT_ROOT_TOKEN:-root}"
-      - "VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200"
-      - "VAULT_ADDR=http://127.0.0.1:8200"
+      - VAULT_DEV_ROOT_TOKEN_ID=${VAULT_ROOT_TOKEN:-root}
+      - VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200
+      - VAULT_ADDR=http://127.0.0.1:8200
     ports:
       - "8200:8200"
     volumes:
-      - "vault_data:/vault/data"
-      - "./vault/config:/vault/config:ro"
+      - vault_data:/vault/data
+      - ./vault/config:/vault/config:ro
     networks:
       - auth
       - backend
     restart: unless-stopped
+  # Consul for service discovery and configuration
   consul:
-    image: "consul:1.14.0"
+    image: consul:1.14.0
     command: agent -server -bootstrap -ui -client=0.0.0.0
     ports:
       - "8500:8500"
       - "8600:8600/udp"
     volumes:
-      - "consul_data:/consul/data"
-      - "./consul/config:/consul/config:ro"
+      - consul_data:/consul/data
+      - ./consul/config:/consul/config:ro
     networks:
       - auth
       - backend
     restart: unless-stopped
 volumes:
   web_data:
+  # Use named volumes for faster file access in development
   node_modules:
     driver: local
   postgres_data:

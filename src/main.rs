@@ -1,4 +1,5 @@
 mod merger;
+mod yq_merger;
 mod env_merger;
 mod error;
 use clap::{Parser, Subcommand};

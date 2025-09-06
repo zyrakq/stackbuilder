@@ -1,17 +1,17 @@
----
-version: "3.8"
+version: '3.8'
 services:
+  # Production-specific overrides
   web:
-    image: "nginx:1.21-alpine"
+    image: nginx:1.21-alpine
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - "./nginx.conf:/etc/nginx/nginx.conf:ro"
-      - "web_data:/var/www/html"
-      - "./nginx-production.conf:/etc/nginx/nginx.conf:ro"
-      - "production_ssl_certs:/etc/ssl/certs:ro"
-      - "production_ssl_keys:/etc/ssl/private:ro"
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - web_data:/var/www/html
+      - ./nginx-production.conf:/etc/nginx/nginx.conf:ro
+      - production_ssl_certs:/etc/ssl/certs:ro
+      - production_ssl_keys:/etc/ssl/private:ro
     depends_on:
       - app
     restart: unless-stopped
@@ -27,24 +27,25 @@ services:
       resources:
         limits:
           memory: 512M
-          cpus: "0.5"
+          cpus: '0.5'
         reservations:
           memory: 256M
-          cpus: "0.25"
+          cpus: '0.25'
       restart_policy:
         condition: on-failure
         max_attempts: 3
+  # Application backend
   app:
-    image: "node:16-alpine"
+    image: node:16-alpine
     working_dir: /app
     volumes:
-      - "./app:/app"
-      - "node_modules:/app/node_modules"
+      - ./app:/app
+      - node_modules:/app/node_modules
     environment:
       - NODE_ENV=production
       - PORT=3000
       - NODE_ENV=production
-      - "API_BASE_URL=https://api.example.com"
+      - API_BASE_URL=https://api.example.com
       - ENABLE_CLUSTERING=true
       - MAX_WORKERS=4
     expose:
@@ -60,31 +61,32 @@ services:
       resources:
         limits:
           memory: 2G
-          cpus: "1.0"
+          cpus: '1.0'
         reservations:
           memory: 1G
-          cpus: "0.5"
+          cpus: '0.5'
       restart_policy:
         condition: on-failure
         max_attempts: 3
       update_config:
         parallelism: 1
         delay: 10s
+  # Database service
   database:
-    image: "postgres:13-alpine"
+    image: postgres:13-alpine
     environment:
       - POSTGRES_DB=appdb
       - POSTGRES_USER=appuser
       - POSTGRES_PASSWORD=secure_password
       - POSTGRES_DB=appdb_production
       - POSTGRES_USER=produser
-      - "POSTGRES_PASSWORD=${PRODUCTION_DB_PASSWORD}"
+      - POSTGRES_PASSWORD=${PRODUCTION_DB_PASSWORD}
       - POSTGRES_SHARED_PRELOAD_LIBRARIES=pg_stat_statements
     volumes:
-      - "postgres_data:/var/lib/postgresql/data"
-      - "./init.sql:/docker-entrypoint-initdb.d/init.sql:ro"
-      - "production_postgres_data:/var/lib/postgresql/data"
-      - "./postgresql.conf:/etc/postgresql/postgresql.conf:ro"
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - production_postgres_data:/var/lib/postgresql/data
+      - ./postgresql.conf:/etc/postgresql/postgresql.conf:ro
     expose:
       - "5432"
     restart: unless-stopped
@@ -95,18 +97,19 @@ services:
       resources:
         limits:
           memory: 4G
-          cpus: "2.0"
+          cpus: '2.0'
         reservations:
           memory: 2G
-          cpus: "1.0"
+          cpus: '1.0'
       restart_policy:
         condition: on-failure
         max_attempts: 3
+  # Redis cache
   cache:
-    image: "redis:6-alpine"
+    image: redis:6-alpine
     command: redis-server --appendonly yes --maxmemory 1gb --maxmemory-policy allkeys-lru
     volumes:
-      - "redis_data:/data"
+      - redis_data:/data
     expose:
       - "6379"
     restart: unless-stopped
@@ -120,20 +123,21 @@ services:
       resources:
         limits:
           memory: 1.5G
-          cpus: "0.5"
+          cpus: '0.5'
         reservations:
           memory: 1G
-          cpus: "0.25"
+          cpus: '0.25'
+  # Production load balancer
   load-balancer:
-    image: "haproxy:2.4-alpine"
+    image: haproxy:2.4-alpine
     ports:
       - "80:80"
       - "443:443"
-      - "8404:8404"
+      - "8404:8404" # HAProxy stats
     volumes:
-      - "./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro"
-      - "production_ssl_certs:/etc/ssl/certs:ro"
-      - "production_ssl_keys:/etc/ssl/private:ro"
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - production_ssl_certs:/etc/ssl/certs:ro
+      - production_ssl_keys:/etc/ssl/private:ro
     depends_on:
       - web
     deploy:
@@ -141,17 +145,18 @@ services:
       resources:
         limits:
           memory: 256M
-          cpus: "0.25"
+          cpus: '0.25'
     networks:
       - frontend
+  # Elasticsearch for log storage
   elasticsearch:
-    image: "docker.elastic.co/elasticsearch/elasticsearch:8.5.0"
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.5.0
     environment:
       - node.name=elasticsearch
       - cluster.name=docker-cluster
       - discovery.type=single-node
       - bootstrap.memory_lock=true
-      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
       - xpack.security.enabled=false
       - xpack.security.enrollment.enabled=false
     ulimits:
@@ -159,38 +164,40 @@ services:
         soft: -1
         hard: -1
     volumes:
-      - "elasticsearch_data:/usr/share/elasticsearch/data"
+      - elasticsearch_data:/usr/share/elasticsearch/data
     ports:
       - "9200:9200"
       - "9300:9300"
     networks:
       - logging
     restart: unless-stopped
+  # Kibana for log visualization
   kibana:
-    image: "docker.elastic.co/kibana/kibana:8.5.0"
+    image: docker.elastic.co/kibana/kibana:8.5.0
     environment:
-      - "ELASTICSEARCH_HOSTS=http://elasticsearch:9200"
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
       - SERVER_NAME=kibana
       - SERVER_HOST=0.0.0.0
     ports:
       - "5601:5601"
     volumes:
-      - "./kibana.yml:/usr/share/kibana/config/kibana.yml:ro"
+      - ./kibana.yml:/usr/share/kibana/config/kibana.yml:ro
     depends_on:
       - elasticsearch
     networks:
       - logging
       - frontend
     restart: unless-stopped
+  # Logstash for log processing
   logstash:
-    image: "docker.elastic.co/logstash/logstash:8.5.0"
+    image: docker.elastic.co/logstash/logstash:8.5.0
     volumes:
-      - "./logstash/pipeline:/usr/share/logstash/pipeline:ro"
-      - "./logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml:ro"
-      - "./logstash/patterns:/usr/share/logstash/patterns:ro"
+      - ./logstash/pipeline:/usr/share/logstash/pipeline:ro
+      - ./logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml:ro
+      - ./logstash/patterns:/usr/share/logstash/patterns:ro
     ports:
-      - "5044:5044"
-      - "9600:9600"
+      - "5044:5044" # Beats input
+      - "9600:9600" # Logstash monitoring
     environment:
       - LS_JAVA_OPTS=-Xmx1g -Xms1g
     depends_on:
@@ -199,55 +206,58 @@ services:
       - logging
       - backend
     restart: unless-stopped
+  # Filebeat for log shipping
   filebeat:
-    image: "docker.elastic.co/beats/filebeat:8.5.0"
+    image: docker.elastic.co/beats/filebeat:8.5.0
     user: root
     volumes:
-      - "./filebeat.yml:/usr/share/filebeat/filebeat.yml:ro"
-      - "/var/lib/docker/containers:/var/lib/docker/containers:ro"
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
-      - "/var/log:/var/log:ro"
-      - "filebeat_data:/usr/share/filebeat/data"
+      - ./filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/log:/var/log:ro
+      - filebeat_data:/usr/share/filebeat/data
     environment:
-      - "ELASTICSEARCH_HOSTS=http://elasticsearch:9200"
-      - "LOGSTASH_HOSTS=logstash:5044"
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - LOGSTASH_HOSTS=logstash:5044
     depends_on:
       - elasticsearch
       - logstash
     networks:
       - logging
     restart: unless-stopped
+  # Fluent Bit as lightweight log processor
   fluent-bit:
-    image: "fluent/fluent-bit:2.0"
+    image: fluent/fluent-bit:2.0
     volumes:
-      - "./fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro"
-      - "./fluent-bit-parsers.conf:/fluent-bit/etc/parsers.conf:ro"
-      - "/var/lib/docker/containers:/var/lib/docker/containers:ro"
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - ./fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
+      - ./fluent-bit-parsers.conf:/fluent-bit/etc/parsers.conf:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     ports:
-      - "24224:24224"
-      - "2020:2020"
+      - "24224:24224" # Forward protocol
+      - "2020:2020" # HTTP monitoring
     depends_on:
       - elasticsearch
     networks:
       - logging
       - backend
     restart: unless-stopped
+  # Log aggregation service
   graylog:
-    image: "graylog/graylog:4.3"
+    image: graylog/graylog:4.3
     environment:
       - GRAYLOG_PASSWORD_SECRET=somepasswordpepper
       - GRAYLOG_ROOT_PASSWORD_SHA2=8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918
-      - "GRAYLOG_HTTP_EXTERNAL_URI=http://127.0.0.1:9000/"
-      - "GRAYLOG_ELASTICSEARCH_HOSTS=http://elasticsearch:9200"
+      - GRAYLOG_HTTP_EXTERNAL_URI=http://127.0.0.1:9000/
+      - GRAYLOG_ELASTICSEARCH_HOSTS=http://elasticsearch:9200
     ports:
-      - "9000:9000"
-      - "1514:1514"
-      - "1514:1514/udp"
-      - "12201:12201"
-      - "12201:12201/udp"
+      - "9000:9000" # Graylog web interface
+      - "1514:1514" # Syslog TCP
+      - "1514:1514/udp" # Syslog UDP
+      - "12201:12201" # GELF TCP
+      - "12201:12201/udp" # GELF UDP
     volumes:
-      - "graylog_data:/usr/share/graylog/data"
+      - graylog_data:/usr/share/graylog/data
     depends_on:
       - elasticsearch
     networks:

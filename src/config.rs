@@ -2,6 +2,22 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use crate::error::{Result, ConfigError, ValidationError, FileSystemError};
 
+/// YAML merger type configuration
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum YamlMergerType {
+    /// Use external yq command (default, recommended)
+    Yq,
+    /// Use built-in Rust libraries (yaml-rust2 + serde_yaml)
+    Rust,
+}
+
+impl Default for YamlMergerType {
+    fn default() -> Self {
+        YamlMergerType::Yq
+    }
+}
+
 #[derive(Deserialize, Serialize, Debug, Default, Clone)]
 pub struct Config {
     pub paths: Paths,
@@ -41,6 +57,8 @@ pub struct Build {
     #[serde(default)]
     pub combos: HashMap<String, Vec<String>>,
     pub targets: Option<BuildTargets>,
+    #[serde(default)]
+    pub yaml_merger: YamlMergerType,
     #[serde(default = "default_copy_env_example")]
     pub copy_env_example: bool,
     #[serde(default = "default_copy_additional_files")]
@@ -73,6 +91,7 @@ impl Default for Build {
             extensions: None,
             combos: HashMap::new(),
             targets: None,
+            yaml_merger: YamlMergerType::default(),
             copy_env_example: default_copy_env_example(),
             copy_additional_files: default_copy_additional_files(),
             exclude_patterns: default_exclude_patterns(),

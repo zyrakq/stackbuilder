@@ -1,8 +1,9 @@
 use std::fs;
 use std::path::Path;
 
-use crate::config;
+use crate::config::{self, YamlMergerType};
 use crate::merger::{ComposeMerger, merge_compose_files};
+use crate::yq_merger::{YqMerger, yq_merge_compose_files, check_yq_availability};
 use crate::env_merger::{EnvMerger, merge_env_files, write_merged_env};
 use crate::file_copier::FileCopier;
 use crate::build_cleaner::BuildCleaner;
@@ -11,7 +12,8 @@ use crate::error::{Result, BuildError, FileSystemError, YamlError, ValidationErr
 /// Structure for managing build process execution
 pub struct BuildExecutor {
     pub config: config::Config,
-    pub merger: ComposeMerger,
+    pub rust_merger: ComposeMerger,
+    pub yq_merger: YqMerger,
     pub env_merger: EnvMerger,
     pub num_envs: usize,
     pub num_extensions: usize,
@@ -24,7 +26,29 @@ impl BuildExecutor {
         config::resolve_paths(&mut config)?;
         config::validate_config(&config)?;
 
-        let merger = ComposeMerger::new(
+        // Check yq availability only if yq merger is configured
+        if config.build.yaml_merger == YamlMergerType::Yq {
+            check_yq_availability()
+                .map_err(|_| BuildError::BuildProcessFailed {
+                    details: format!(
+                        "yq is required but not available. Please either:\n\
+                        1. Install yq v4+ from https://github.com/mikefarah/yq\n\
+                        2. Or set yaml_merger = \"rust\" in your stackbuilder.toml config file\n\n\
+                        Installation options:\n\
+                        - Ubuntu/Debian: sudo apt install yq\n\
+                        - macOS: brew install yq\n\
+                        - Binary: wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && chmod +x /usr/bin/yq"
+                    ),
+                })?;
+        }
+
+        let rust_merger = ComposeMerger::new(
+            config.paths.base_dir.clone(),
+            config.paths.environments_dir.clone(),
+            config.paths.extensions_dirs.clone(),
+        );
+
+        let yq_merger = YqMerger::new(
             config.paths.base_dir.clone(),
             config.paths.environments_dir.clone(),
             config.paths.extensions_dirs.clone(),
@@ -39,7 +63,7 @@ impl BuildExecutor {
         let num_envs = config.build.environments.as_ref().map_or(0, |e| e.len());
         let num_extensions = config.build.extensions.as_ref().map_or(0, |e| e.len());
 
-        Ok(Self { config, merger, env_merger, num_envs, num_extensions })
+        Ok(Self { config, rust_merger, yq_merger, env_merger, num_envs, num_extensions })
     }
 }
 
@@ -405,16 +429,33 @@ fn create_build_structure(executor: &BuildExecutor, combinations: &[BuildCombina
         // Resolve all extensions (direct + from combos)
         let all_extensions = resolve_all_extensions(&executor.config, &combo.extensions, &combo.combo_names)?;
         
-        let merged = merge_compose_files(&executor.merger, environment_opt, &all_extensions)
-            .map_err(|e| BuildError::BuildProcessFailed {
-                details: format!("Failed to merge compose files for combination {:?}: {}", combo.output_dir, e),
-            })?;
+        // Choose merger based on configuration
+        let final_content = match executor.config.build.yaml_merger {
+            YamlMergerType::Yq => {
+                // Use yq merger
+                let content = yq_merge_compose_files(&executor.yq_merger, environment_opt, &all_extensions)
+                    .map_err(|e| BuildError::BuildProcessFailed {
+                        details: format!("Failed to merge compose files with yq for combination {:?}: {}", combo.output_dir, e),
+                    })?;
+                println!("✓ Used yq merger for: {}", combo.output_dir);
+                content
+            }
+            YamlMergerType::Rust => {
+                // Use Rust merger directly
+                let merged = merge_compose_files(&executor.rust_merger, environment_opt, &all_extensions)
+                    .map_err(|e| BuildError::BuildProcessFailed {
+                        details: format!("Failed to merge compose files with Rust for combination {:?}: {}", combo.output_dir, e),
+                    })?;
+                
+                println!("✓ Used Rust merger for: {}", combo.output_dir);
+                serialize_yaml_with_proper_indentation(&merged)?
+            }
+        };
 
         // Write merged file
         let compose_path = output_path.join(&file_name);
-        let yaml_string = serialize_yaml_with_proper_indentation(&merged)?;
 
-        fs::write(&compose_path, yaml_string)
+        fs::write(&compose_path, final_content)
             .map_err(|e| BuildError::OutputFileWriteError {
                 path: compose_path.clone(),
                 source: e,
@@ -474,18 +515,18 @@ fn create_build_structure(executor: &BuildExecutor, combinations: &[BuildCombina
 
 /// Serialize YAML with proper formatting and clean null values
 fn serialize_yaml_with_proper_indentation(value: &serde_yaml::Value) -> Result<String> {
-    // Use yaml_rust for better formatting control
+    // Use yaml-rust2 for better formatting control
     let mut out_str = String::new();
     {
-        let mut emitter = yaml_rust::YamlEmitter::new(&mut out_str);
+        let mut emitter = yaml_rust2::YamlEmitter::new(&mut out_str);
         
-        // Convert serde_yaml::Value to yaml_rust::Yaml
+        // Convert serde_yaml::Value to yaml_rust2::Yaml
         let yaml_str = serde_yaml::to_string(value)
             .map_err(|e| YamlError::SerializationError {
                 details: e.to_string(),
             })?;
             
-        let docs = yaml_rust::YamlLoader::load_from_str(&yaml_str)
+        let docs = yaml_rust2::YamlLoader::load_from_str(&yaml_str)
             .map_err(|e| YamlError::SerializationError {
                 details: format!("Failed to parse YAML for formatting: {}", e),
             })?;

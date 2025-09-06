@@ -1,16 +1,15 @@
----
-version: "3.8"
+version: '3.8'
 services:
   app:
-    image: "nginx:alpine"
+    image: nginx:alpine
     ports:
       - "80:80"
     environment:
       - APP_ENV=base
     volumes:
-      - "./html:/usr/share/nginx/html"
+      - ./html:/usr/share/nginx/html
   debug-tools:
-    image: "nicolaka/netshoot:latest"
+    image: nicolaka/netshoot:latest
     command: sleep infinity
     network_mode: "service:app"
     cap_add:
@@ -19,17 +18,17 @@ services:
       - DEBUG_MODE=enabled
       - TRACE_LEVEL=verbose
     volumes:
-      - "./debug-scripts:/scripts:ro"
+      - ./debug-scripts:/scripts:ro
   profiler:
-    image: "pyroscope/pyroscope:latest"
+    image: pyroscope/pyroscope:latest
     ports:
       - "4040:4040"
     environment:
       - PYROSCOPE_LOG_LEVEL=debug
       - PYROSCOPE_STORAGE_PATH=/var/lib/pyroscope
     volumes:
-      - "profiler_data:/var/lib/pyroscope"
+      - profiler_data:/var/lib/pyroscope
     command:
-      - server
+      - "server"
 volumes:
   profiler_data:

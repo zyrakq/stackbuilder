@@ -1,36 +1,35 @@
----
-version: "3.8"
+version: '3.8'
 services:
   web:
-    image: "nginx:alpine"
+    image: nginx:alpine
     ports:
       - "8080:80"
       - "3000:3000"
     volumes:
-      - "./nginx.conf:/etc/nginx/nginx.conf:ro"
-      - "/var/run/docker.sock:/var/run/docker.sock"
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       - app
     environment:
       - NODE_ENV=development
       - DEBUG=true
-    command: "nginx -g 'daemon off;'"
+    command: nginx -g 'daemon off;'
   app:
-    image: "python:3.9"
+    image: python:3.9
     command: flask run --host=0.0.0.0
     ports:
       - "8001:8000"
       - "5000:5000"
     volumes:
-      - "../app:/app"
-      - "../app:/app"
+      - ../app:/app
+      - ../app:/app
     working_dir: /app
     environment:
       - FLASK_ENV=development
       - PYTHONUNBUFFERED=1
   devcontainer:
-    image: "mcr.microsoft.com/devcontainers/python:3.9"
+    image: mcr.microsoft.com/devcontainers/python:3.9
     volumes:
-      - "../:/workspaces:cached"
+      - ../:/workspaces:cached
     working_dir: /workspaces
     command: sleep infinity
