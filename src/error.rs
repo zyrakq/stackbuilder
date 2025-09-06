@@ -205,6 +205,14 @@ impl ValidationError {
             path: path.into(),
         }
     }
+    
+    #[cfg(test)]
+    pub fn extension_not_found(name: impl Into<String>, available_dirs: Vec<String>) -> Self {
+        Self::ExtensionNotFound {
+            name: name.into(),
+            available_dirs,
+        }
+    }
 }
 
 impl YamlError {
@@ -212,6 +220,14 @@ impl YamlError {
         Self::ParseError {
             file: file.into(),
             details: error.to_string(),
+        }
+    }
+    
+    #[cfg(test)]
+    pub fn parse_error(file: impl Into<String>, details: impl Into<String>) -> Self {
+        Self::ParseError {
+            file: file.into(),
+            details: details.into(),
         }
     }
 }

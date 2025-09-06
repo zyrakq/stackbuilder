@@ -47,6 +47,14 @@ Your assembled Docker Compose files will be generated in the `./build` directory
 cargo install stackbuilder
 ```
 
+### Arch Linux
+
+```bash
+# Using makepkg (see docs/archlinux-packaging.md for details)
+cd packaging/archlinux
+makepkg -si
+```
+
 ### From Source
 
 ```bash

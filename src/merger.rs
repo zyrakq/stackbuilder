@@ -4,6 +4,7 @@ use serde_yaml::Value;
 use crate::error::{Result, YamlError, FileSystemError};
 
 /// Structure for managing docker-compose file merging process
+#[derive(Debug)]
 pub struct ComposeMerger {
     pub base_path: String,
     pub environments_path: String,
@@ -162,3 +163,4 @@ pub fn resolve_merge_order(
 
     Ok(file_paths)
 }
+

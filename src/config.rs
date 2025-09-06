@@ -376,15 +376,16 @@ pub fn resolve_paths(config: &mut Config) -> Result<()> {
     Ok(())
 }
 
-
 // Discover available extensions from extensions_dirs
 pub fn discover_extensions(config: &Config) -> Result<Vec<String>> {
     let mut extensions = Vec::new();
 
     for ext_dir in &config.paths.extensions_dirs {
-        let ext_path = std::path::Path::new(ext_dir);
+        // Build full path: components_dir + ext_dir
+        let ext_path = std::path::Path::new(&config.paths.components_dir).join(ext_dir);
+        
         if ext_path.exists() {
-            for entry in std::fs::read_dir(ext_path)
+            for entry in std::fs::read_dir(&ext_path)
                 .map_err(|e| FileSystemError::DirectoryReadFailed {
                     path: ext_path.to_path_buf(),
                     source: e,
@@ -393,6 +394,7 @@ pub fn discover_extensions(config: &Config) -> Result<Vec<String>> {
                     path: ext_path.to_path_buf(),
                     source: e,
                 })?;
+                
                 if entry.path().is_dir() {
                     if let Some(name) = entry.file_name().to_str() {
                         extensions.push(name.to_string());
@@ -428,7 +430,6 @@ pub fn resolve_combo_extensions(config: &Config, combo_names: &[String]) -> Resu
     
     Ok(resolved_extensions)
 }
-
 
 // Get combo names for an environment target
 pub fn get_target_combo_names(env_target: &EnvironmentTarget) -> Vec<String> {

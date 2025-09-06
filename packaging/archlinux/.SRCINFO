@@ -1,0 +1,18 @@
+pkgbase = stackbuilder
+	pkgdesc = A powerful CLI tool for building Docker Compose files from modular components with multi-environment support and extension system
+	pkgver = 0.1.0
+	pkgrel = 1
+	url = https://github.com/zyrakq/stackbuilder
+	arch = x86_64
+	arch = i686
+	arch = aarch64
+	license = MIT
+	license = Apache-2.0
+	makedepends = rust
+	makedepends = cargo
+	depends = gcc-libs
+	depends = go-yq
+	source = stackbuilder-0.1.0.tar.gz::https://github.com/zyrakq/stackbuilder/archive/v0.1.0.tar.gz
+	sha256sums = SKIP
+
+pkgname = stackbuilder

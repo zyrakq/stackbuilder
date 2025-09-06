@@ -10,6 +10,7 @@ use crate::build_cleaner::BuildCleaner;
 use crate::error::{Result, BuildError, FileSystemError, YamlError, ValidationError};
 
 /// Structure for managing build process execution
+#[derive(Debug)]
 pub struct BuildExecutor {
     pub config: config::Config,
     pub rust_merger: ComposeMerger,

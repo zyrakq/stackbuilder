@@ -2,67 +2,54 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::build::*;
     use crate::tests::*;
     use std::fs;
-    use tempfile::tempdir;
 
     #[test]
     fn test_build_executor_creation() {
-        let temp_dir = tempdir().expect("Failed to create temp dir");
-        create_test_project(temp_dir.path()).expect("Failed to create test project");
-        
-        let original_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir(temp_dir.path()).unwrap();
-        
-        let result = BuildExecutor::new();
-        
-        std::env::set_current_dir(original_dir).unwrap();
-        
-        assert!(result.is_ok());
-        let executor = result.unwrap();
-        assert_eq!(executor.num_envs, 2);
-        assert_eq!(executor.num_extensions, 1);
+        run_in_temp_dir(|temp_path| {
+            create_test_project(temp_path).expect("Failed to create test project");
+            
+            let result = create_build_executor_in_dir(temp_path);
+            
+            assert!(result.is_ok(), "BuildExecutor creation should succeed: {:?}", result);
+            let executor = result.unwrap();
+            assert_eq!(executor.num_envs, 2);
+            assert_eq!(executor.num_extensions, 1);
+        });
     }
 
     #[test]
     fn test_build_executor_missing_config() {
-        let temp_dir = tempdir().expect("Failed to create temp dir");
-        let original_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir(temp_dir.path()).unwrap();
-        
-        let result = BuildExecutor::new();
-        
-        std::env::set_current_dir(original_dir).unwrap();
-        
-        assert!(result.is_err());
+        run_in_temp_dir(|temp_path| {
+            // Don't create any project files - should fail
+            let result = create_build_executor_in_dir(temp_path);
+            
+            assert!(result.is_err(), "BuildExecutor creation should fail when config is missing");
+        });
     }
 
     #[test]
     fn test_execute_build_integration() {
-        let temp_dir = tempdir().expect("Failed to create temp dir");
-        create_test_project(temp_dir.path()).expect("Failed to create test project");
-        
-        let original_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir(temp_dir.path()).unwrap();
-        
-        let result = execute_build();
-        
-        std::env::set_current_dir(original_dir).unwrap();
-        
-        assert!(result.is_ok());
-        
-        // Check that build directory was created with expected files
-        let build_dir = temp_dir.path().join("build");
-        assert!(build_dir.exists());
-        
-        // Should have created multiple combinations
-        let generated_files: Vec<_> = fs::read_dir(&build_dir)
-            .unwrap()
-            .filter_map(|entry| entry.ok())
-            .filter(|entry| entry.path().is_dir())
-            .collect();
-        
-        assert!(!generated_files.is_empty());
+        run_in_temp_dir(|temp_path| {
+            create_test_project(temp_path).expect("Failed to create test project");
+            
+            let result = execute_build_in_dir(temp_path);
+            
+            assert!(result.is_ok(), "Build execution should succeed: {:?}", result);
+            
+            // Check that build directory was created
+            let build_dir = temp_path.join("build");
+            assert!(build_dir.exists(), "Build directory should exist at: {:?}", build_dir);
+            
+            // Should have created at least one test combination
+            let generated_files: Vec<_> = fs::read_dir(&build_dir)
+                .expect("Failed to read build directory")
+                .filter_map(|entry| entry.ok())
+                .filter(|entry| entry.path().is_dir())
+                .collect();
+            
+            assert!(!generated_files.is_empty(), "Should have generated at least one build combination");
+        });
     }
 }

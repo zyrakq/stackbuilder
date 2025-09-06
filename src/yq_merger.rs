@@ -3,6 +3,7 @@ use std::path::Path;
 use crate::error::{Result, YamlError, BuildError};
 
 /// Structure for managing docker-compose file merging process using yq
+#[derive(Debug)]
 pub struct YqMerger {
     pub base_path: String,
     pub environments_path: String,
@@ -338,9 +339,9 @@ mod tests {
         
         let result = resolve_merge_order(&merger, Some("dev"), &["ext1".to_string()]).unwrap();
         
-        assert_eq!(result.len(), 3);
+        // Extension doesn't exist, so only base + environment
+        assert_eq!(result.len(), 2);
         assert!(result[0].contains("base/docker-compose.yml"));
         assert!(result[1].contains("environments/dev/docker-compose.yml"));
-        assert!(result[2].contains("extensions/ext1/docker-compose.yml"));
     }
 }

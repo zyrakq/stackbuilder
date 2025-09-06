@@ -4,6 +4,7 @@ use std::path::Path;
 use crate::error::{Result, FileSystemError};
 
 /// Structure for managing .env.example file merging process
+#[derive(Debug)]
 pub struct EnvMerger {
     pub base_path: String,
     pub environments_path: String,

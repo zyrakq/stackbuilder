@@ -1,0 +1,53 @@
+# Maintainer: Zyrakq <serg.shehov@tutanota.com>
+pkgname=stackbuilder
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="A powerful CLI tool for building Docker Compose files from modular components with multi-environment support and extension system"
+arch=('x86_64' 'i686' 'aarch64')
+url="https://github.com/zyrakq/stackbuilder"
+license=('MIT' 'Apache-2.0')
+depends=('gcc-libs' 'go-yq')
+makedepends=('rust' 'cargo')
+source=("$pkgname-$pkgver.tar.gz::https://github.com/zyrakq/stackbuilder/archive/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+prepare() {
+    cd "$pkgname-$pkgver"
+    export RUSTUP_TOOLCHAIN=stable
+    cargo fetch --locked --target "$CARCH-unknown-linux-gnu"
+}
+
+build() {
+    cd "$pkgname-$pkgver"
+    export RUSTUP_TOOLCHAIN=stable
+    export CARGO_TARGET_DIR=target
+    cargo build --frozen --release --all-features
+}
+
+check() {
+    cd "$pkgname-$pkgver"
+    export RUSTUP_TOOLCHAIN=stable
+    cargo test --frozen --all-features
+}
+
+package() {
+    cd "$pkgname-$pkgver"
+    install -Dm0755 -t "$pkgdir/usr/bin/" "target/release/stackbuilder"
+    
+    # Create symlink with short name
+    ln -s stackbuilder "$pkgdir/usr/bin/sb"
+    
+    # Install documentation
+    install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+    install -Dm644 docs/config.md "$pkgdir/usr/share/doc/$pkgname/config.md"
+    install -Dm644 docs/build.md "$pkgdir/usr/share/doc/$pkgname/build.md"
+    install -Dm644 docs/testing-report.md "$pkgdir/usr/share/doc/$pkgname/testing-report.md"
+    install -Dm644 docs/yaml-merger.md "$pkgdir/usr/share/doc/$pkgname/yaml-merger.md"
+    
+    # Install licenses
+    install -Dm644 LICENSE-MIT "$pkgdir/usr/share/licenses/$pkgname/LICENSE-MIT"
+    install -Dm644 LICENSE-APACHE "$pkgdir/usr/share/licenses/$pkgname/LICENSE-APACHE"
+    
+    # Install examples
+    cp -r examples "$pkgdir/usr/share/doc/$pkgname/"
+}
