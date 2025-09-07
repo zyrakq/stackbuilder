@@ -3,19 +3,14 @@ use std::collections::HashMap;
 use crate::error::{Result, ConfigError, ValidationError, FileSystemError};
 
 /// YAML merger type configuration
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum YamlMergerType {
     /// Use external yq command (default, recommended)
+    #[default]
     Yq,
     /// Use built-in Rust libraries (yaml-rust2 + serde_yaml)
     Rust,
-}
-
-impl Default for YamlMergerType {
-    fn default() -> Self {
-        YamlMergerType::Yq
-    }
 }
 
 #[derive(Deserialize, Serialize, Debug, Default, Clone)]

@@ -1,0 +1,52 @@
+#!/usr/bin/make -f
+
+PACKAGE_NAME = stackbuilder
+VERSION = 0.1.0
+
+%:
+	@echo "Manual Debian packaging (without debhelper)"
+
+build:
+	cargo build --frozen --release --all-features
+
+install: build
+	# Create package directory structure
+	mkdir -p debian/$(PACKAGE_NAME)/usr/bin
+	mkdir -p debian/$(PACKAGE_NAME)/usr/share/doc/$(PACKAGE_NAME)
+	mkdir -p debian/$(PACKAGE_NAME)/DEBIAN
+	
+	# Install binary
+	install -m755 target/release/stackbuilder debian/$(PACKAGE_NAME)/usr/bin/stackbuilder
+	ln -s stackbuilder debian/$(PACKAGE_NAME)/usr/bin/sb
+	
+	# Install documentation
+	install -m644 README.md debian/$(PACKAGE_NAME)/usr/share/doc/$(PACKAGE_NAME)/README.md
+	install -m644 docs/config.md debian/$(PACKAGE_NAME)/usr/share/doc/$(PACKAGE_NAME)/config.md
+	install -m644 docs/build.md debian/$(PACKAGE_NAME)/usr/share/doc/$(PACKAGE_NAME)/build.md
+	install -m644 docs/testing-report.md debian/$(PACKAGE_NAME)/usr/share/doc/$(PACKAGE_NAME)/testing-report.md
+	install -m644 docs/yaml-merger.md debian/$(PACKAGE_NAME)/usr/share/doc/$(PACKAGE_NAME)/yaml-merger.md
+	
+	# Install examples
+	cp -r examples debian/$(PACKAGE_NAME)/usr/share/doc/$(PACKAGE_NAME)/
+	
+	# Create control file
+	echo "Package: $(PACKAGE_NAME)" > debian/$(PACKAGE_NAME)/DEBIAN/control
+	echo "Version: $(VERSION)-1" >> debian/$(PACKAGE_NAME)/DEBIAN/control
+	echo "Architecture: $$(dpkg --print-architecture)" >> debian/$(PACKAGE_NAME)/DEBIAN/control
+	echo "Maintainer: Zyrakq <serg.shehov@tutanota.com>" >> debian/$(PACKAGE_NAME)/DEBIAN/control
+	echo "Depends: yq" >> debian/$(PACKAGE_NAME)/DEBIAN/control
+	echo "Section: utils" >> debian/$(PACKAGE_NAME)/DEBIAN/control
+	echo "Priority: optional" >> debian/$(PACKAGE_NAME)/DEBIAN/control
+	echo "Homepage: https://github.com/zyrakq/stackbuilder" >> debian/$(PACKAGE_NAME)/DEBIAN/control
+	echo "Description: A powerful CLI tool for building Docker Compose files from modular components" >> debian/$(PACKAGE_NAME)/DEBIAN/control
+	echo " StackBuilder is a command-line tool that helps you build Docker Compose files" >> debian/$(PACKAGE_NAME)/DEBIAN/control
+	echo " from modular components with multi-environment support and extension system." >> debian/$(PACKAGE_NAME)/DEBIAN/control
+
+binary: install
+	dpkg-deb --build debian/$(PACKAGE_NAME) ../$(PACKAGE_NAME)_$(VERSION)-1_$$(dpkg --print-architecture).deb
+
+clean:
+	cargo clean
+	rm -rf debian/$(PACKAGE_NAME)
+
+.PHONY: build install binary clean

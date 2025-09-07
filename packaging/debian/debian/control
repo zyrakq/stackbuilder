@@ -1,0 +1,26 @@
+Source: stackbuilder
+Section: utils
+Priority: optional
+Maintainer: Zyrakq <serg.shehov@tutanota.com>
+Build-Depends: cargo,
+               rustc,
+               pkg-config
+Standards-Version: 4.6.0
+Homepage: https://github.com/zyrakq/stackbuilder
+Vcs-Git: https://github.com/zyrakq/stackbuilder.git
+Vcs-Browser: https://github.com/zyrakq/stackbuilder
+Rules-Requires-Root: no
+
+Package: stackbuilder
+Architecture: any
+Depends: ${misc:Depends}, ${shlibs:Depends}, yq
+Description: A powerful CLI tool for building Docker Compose files from modular components
+ StackBuilder is a command-line tool that helps you build Docker Compose files
+ from modular components with multi-environment support and extension system.
+ .
+ Key features:
+  - Modular component system for reusable configurations
+  - Multi-environment support (development, staging, production)
+  - Extension system for additional functionality
+  - YAML merging and templating capabilities
+  - Simple configuration management

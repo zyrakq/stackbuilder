@@ -31,15 +31,13 @@ impl BuildExecutor {
         if config.build.yaml_merger == YamlMergerType::Yq {
             check_yq_availability()
                 .map_err(|_| BuildError::BuildProcessFailed {
-                    details: format!(
-                        "yq is required but not available. Please either:\n\
+                    details: "yq is required but not available. Please either:\n\
                         1. Install yq v4+ from https://github.com/mikefarah/yq\n\
                         2. Or set yaml_merger = \"rust\" in your stackbuilder.toml config file\n\n\
                         Installation options:\n\
                         - Ubuntu/Debian: sudo apt install yq\n\
                         - macOS: brew install yq\n\
-                        - Binary: wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && chmod +x /usr/bin/yq"
-                    ),
+                        - Binary: wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && chmod +x /usr/bin/yq".to_string(),
                 })?;
         }
 

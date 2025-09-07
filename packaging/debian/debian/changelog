@@ -1,0 +1,8 @@
+stackbuilder (0.1.0-1) unstable; urgency=medium
+
+  * Initial release of StackBuilder
+  * A powerful CLI tool for building Docker Compose files from modular components
+  * Multi-environment support and extension system
+  * YAML merging and templating capabilities
+
+ -- Zyrakq <serg.shehov@tutanota.com>  Sat, 07 Sep 2025 00:00:00 +0000
