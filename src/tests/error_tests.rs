@@ -110,7 +110,7 @@ mod tests {
         assert!(error.to_string().contains("invalid syntax"));
 
         // Create a serde_yaml error by trying to parse invalid YAML
-        let yaml_result: std::result::Result<serde_yaml::Value, serde_yaml::Error> = serde_yaml::from_str("invalid: yaml: [");
+        let yaml_result: std::result::Result<serde_yaml_ng::Value, serde_yaml_ng::Error> = serde_yaml_ng::from_str("invalid: yaml: [");
         if let Err(serde_error) = yaml_result {
             let error = YamlError::serde_error("test.yml", serde_error);
             assert!(error.to_string().contains("test.yml"));

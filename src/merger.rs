@@ -1,6 +1,6 @@
 use std::fs;
 use std::path::Path;
-use serde_yaml::Value;
+use serde_yaml_ng::Value;
 use crate::error::{Result, YamlError, FileSystemError};
 
 /// Structure for managing docker-compose file merging process
@@ -30,7 +30,7 @@ pub fn load_compose_file(file_path: &str) -> Result<Value> {
             source: e,
         })?;
 
-    let yaml_value: Value = serde_yaml::from_str(&content)
+    let yaml_value: Value = serde_yaml_ng::from_str(&content)
         .map_err(|e| YamlError::serde_error(file_path, e))?;
 
     // Validate basic docker-compose structure

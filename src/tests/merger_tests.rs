@@ -4,7 +4,7 @@
 mod tests {
     use crate::merger::*;
     use crate::tests::*;
-    use serde_yaml::Value;
+    use serde_yaml_ng::Value;
     use std::fs;
     use tempfile::tempdir;
 
@@ -100,7 +100,7 @@ services:
 
     #[test]
     fn test_merge_yaml_values_mappings() {
-        let base = serde_yaml::from_str(r#"
+        let base = serde_yaml_ng::from_str(r#"
 services:
   web:
     image: nginx:alpine
@@ -108,7 +108,7 @@ services:
       - "80:80"
 "#).unwrap();
         
-        let override_yaml = serde_yaml::from_str(r#"
+        let override_yaml = serde_yaml_ng::from_str(r#"
 services:
   web:
     environment:
@@ -140,7 +140,7 @@ services:
 
     #[test]
     fn test_merge_yaml_values_sequences() {
-        let base = serde_yaml::from_str(r#"
+        let base = serde_yaml_ng::from_str(r#"
 services:
   web:
     ports:
@@ -148,7 +148,7 @@ services:
       - "443:443"
 "#).unwrap();
         
-        let override_yaml = serde_yaml::from_str(r#"
+        let override_yaml = serde_yaml_ng::from_str(r#"
 services:
   web:
     ports:
@@ -181,14 +181,14 @@ services:
 
     #[test]
     fn test_merge_yaml_values_primitives() {
-        let base = serde_yaml::from_str(r#"
+        let base = serde_yaml_ng::from_str(r#"
 version: '3.8'
 services:
   web:
     restart: "no"
 "#).unwrap();
         
-        let override_yaml = serde_yaml::from_str(r#"
+        let override_yaml = serde_yaml_ng::from_str(r#"
 version: '3.9'
 services:
   web:

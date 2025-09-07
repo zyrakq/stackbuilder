@@ -216,7 +216,7 @@ impl ValidationError {
 }
 
 impl YamlError {
-    pub fn serde_error(file: impl Into<String>, error: serde_yaml::Error) -> Self {
+    pub fn serde_error(file: impl Into<String>, error: serde_yaml_ng::Error) -> Self {
         Self::ParseError {
             file: file.into(),
             details: error.to_string(),

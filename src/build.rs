@@ -513,14 +513,14 @@ fn create_build_structure(executor: &BuildExecutor, combinations: &[BuildCombina
 }
 
 /// Serialize YAML with proper formatting and clean null values
-fn serialize_yaml_with_proper_indentation(value: &serde_yaml::Value) -> Result<String> {
+fn serialize_yaml_with_proper_indentation(value: &serde_yaml_ng::Value) -> Result<String> {
     // Use yaml-rust2 for better formatting control
     let mut out_str = String::new();
     {
         let mut emitter = yaml_rust2::YamlEmitter::new(&mut out_str);
         
         // Convert serde_yaml::Value to yaml_rust2::Yaml
-        let yaml_str = serde_yaml::to_string(value)
+        let yaml_str = serde_yaml_ng::to_string(value)
             .map_err(|e| YamlError::SerializationError {
                 details: e.to_string(),
             })?;

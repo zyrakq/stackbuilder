@@ -9,7 +9,7 @@ pub enum YamlMergerType {
     /// Use external yq command (default, recommended)
     #[default]
     Yq,
-    /// Use built-in Rust libraries (yaml-rust2 + serde_yaml)
+    /// Use built-in Rust libraries (yaml-rust2 + serde_yaml_ng)
     Rust,
 }
 
