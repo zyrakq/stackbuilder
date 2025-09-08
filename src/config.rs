@@ -80,6 +80,7 @@ pub struct BuildTargets {
 pub struct EnvironmentTarget {
     pub extensions: Option<Vec<String>>,
     pub combos: Option<Vec<String>>,
+    pub skip_base_generation: Option<bool>,
 }
 
 impl Default for Build {

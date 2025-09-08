@@ -137,20 +137,21 @@ fn resolve_legacy_combinations_with_targets(config: &config::Config, targets: Op
     // Get global extensions (applies to all environments if no per-env config)
     let global_extensions = config.build.extensions.as_ref().map_or_else(Vec::new, |v| v.clone());
 
-    // Build per-environment extension/combo map from targets
+    // Build per-environment extension/combo/skip_base map from targets
     let mut env_specific_configs = std::collections::HashMap::new();
     if let Some(targets) = targets {
         for (env_name, env_target) in &targets.environment_configs {
             let env_extensions = env_target.extensions.as_ref().map_or_else(Vec::new, |e| e.clone());
             let env_combo_names = env_target.combos.as_ref().map_or_else(Vec::new, |c| c.clone());
-            env_specific_configs.insert(env_name.clone(), (env_extensions, env_combo_names));
+            let env_skip_base = env_target.skip_base_generation.unwrap_or(config.build.skip_base_generation);
+            env_specific_configs.insert(env_name.clone(), (env_extensions, env_combo_names, env_skip_base));
         }
     }
 
     // Calculate total variants for each environment
     let mut total_variants = 0;
     for env in &environments {
-        if let Some((env_extensions, env_combo_names)) = env_specific_configs.get(env) {
+        if let Some((env_extensions, env_combo_names, _env_skip_base)) = env_specific_configs.get(env) {
             // Per-environment specific extensions/combos
             total_variants += env_extensions.len() + env_combo_names.len();
         } else {
@@ -180,19 +181,19 @@ fn resolve_legacy_combinations_with_targets(config: &config::Config, targets: Op
             // 1 environment with extensions/combos
             let env = &environments[0];
 
-            // Get extensions and combos for this environment (either per-env or global)
-            let (env_extensions, env_combo_names) = if let Some((ext, combos)) = env_specific_configs.get(env) {
-                (ext.clone(), combos.clone())
+            // Get extensions, combos, and skip_base for this environment (either per-env or global)
+            let (env_extensions, env_combo_names, env_skip_base) = if let Some((ext, combos, skip_base)) = env_specific_configs.get(env) {
+                (ext.clone(), combos.clone(), *skip_base)
             } else {
-                (global_extensions.clone(), config.build.combos.keys().cloned().collect())
+                (global_extensions.clone(), config.build.combos.keys().cloned().collect(), config.build.skip_base_generation)
             };
 
             let env_total_variants = env_extensions.len() + env_combo_names.len();
-            let should_create_subfolders = env_total_variants > 1 || !config.build.skip_base_generation;
+            let should_create_subfolders = env_total_variants > 1 || !env_skip_base;
 
             if should_create_subfolders {
                 // Create base subfolder if not skipped (NO env prefix for single environment)
-                if !config.build.skip_base_generation {
+                if !env_skip_base {
                     combinations.push(BuildCombination {
                         environment: Some(env.clone()),
                         extensions: vec![],
@@ -267,32 +268,33 @@ fn resolve_legacy_combinations_with_targets(config: &config::Config, targets: Op
         _ => {
             // Multiple environments OR single env with variants - handle each environment individually
             for env in &environments {
-                // Get extensions and combos for this environment
-                let (env_extensions, env_combo_names) = if let Some((ext, combos)) = env_specific_configs.get(env) {
-                    (ext.clone(), combos.clone())
+                // Get extensions, combos, and skip_base for this environment
+                let (env_extensions, env_combo_names, env_skip_base) = if let Some((ext, combos, skip_base)) = env_specific_configs.get(env) {
+                    (ext.clone(), combos.clone(), *skip_base)
                 } else {
-                    (global_extensions.clone(), config.build.combos.keys().cloned().collect())
+                    (global_extensions.clone(), config.build.combos.keys().cloned().collect(), config.build.skip_base_generation)
                 };
 
                 let env_total_variants = env_extensions.len() + env_combo_names.len();
                 
                 if num_envs > 1 {
                     // Multiple environments - always use env/subfolder structure
-                    
-                    // Environment base (only if not skipped)
-                    if !config.build.skip_base_generation {
-                        combinations.push(BuildCombination {
-                            environment: Some(env.clone()),
-                            extensions: vec![],
-                            combo_names: vec![],
-                            output_dir: format!("{}/base", env),
-                        });
-                    }
+                    // Note: Base creation is handled inside should_create_env_subfolders logic below
 
                     // Check if this specific environment should create subfolders
-                    let should_create_env_subfolders = env_total_variants > 1 || !config.build.skip_base_generation;
+                    let should_create_env_subfolders = env_total_variants > 1 || !env_skip_base;
                     
                     if should_create_env_subfolders {
+                        // Environment base (only if not skipped)
+                        if !env_skip_base {
+                            combinations.push(BuildCombination {
+                                environment: Some(env.clone()),
+                                extensions: vec![],
+                                combo_names: vec![],
+                                output_dir: format!("{}/base", env),
+                            });
+                        }
+
                         // Environment with extensions - with subfolders
                         for ext in &env_extensions {
                             combinations.push(BuildCombination {

@@ -218,4 +218,68 @@ services:
             assert!(executor.config.build.skip_base_generation);
         });
     }
+
+    #[test]
+    fn test_per_environment_skip_base_generation() {
+        run_in_temp_dir(|temp_path| {
+            // Create config with per-environment skip_base_generation
+            let config_content = r#"
+[build]
+environments = ["dev", "prod"]
+skip_base_generation = false  # Global default
+
+[build.targets.dev]
+extensions = ["monitoring"]
+skip_base_generation = true   # dev skips base
+
+[build.targets.prod]
+extensions = ["monitoring"]
+skip_base_generation = false  # prod includes base
+"#;
+            fs::write(temp_path.join("stackbuilder.toml"), config_content).expect("Failed to write config");
+
+            // Create component structure
+            let base_compose = r#"
+version: '3.8'
+services:
+  app:
+    image: nginx:latest
+"#;
+            fs::create_dir_all(temp_path.join("components/base")).expect("Failed to create base dir");
+            fs::write(temp_path.join("components/base/docker-compose.yml"), base_compose).expect("Failed to write base compose");
+
+            // Create environments directories
+            fs::create_dir_all(temp_path.join("components/environments/dev")).expect("Failed to create dev env dir");
+            fs::write(temp_path.join("components/environments/dev/docker-compose.yml"), base_compose).expect("Failed to write dev compose");
+            
+            fs::create_dir_all(temp_path.join("components/environments/prod")).expect("Failed to create prod env dir");
+            fs::write(temp_path.join("components/environments/prod/docker-compose.yml"), base_compose).expect("Failed to write prod compose");
+
+            // Create monitoring extension
+            fs::create_dir_all(temp_path.join("components/extensions/monitoring")).expect("Failed to create monitoring dir");
+            fs::write(temp_path.join("components/extensions/monitoring/docker-compose.yml"), base_compose).expect("Failed to write monitoring compose");
+
+            // Execute real build
+            let result = execute_real_build_in_dir(temp_path);
+            assert!(result.is_ok(), "Build execution should succeed: {:?}", result);
+
+            let build_dir = temp_path.join("build");
+            
+            // dev should NOT have base subfolder (skip_base_generation = true)
+            let dev_base = build_dir.join("dev/base");
+            assert!(!dev_base.exists(), "dev should not have base subfolder when skip_base_generation = true");
+            
+            // dev should have monitoring merged directly into environment (single variant)
+            let dev_monitoring = build_dir.join("dev/docker-compose.yml");
+            assert!(dev_monitoring.exists(), "dev should have monitoring merged directly into environment folder");
+            
+            // prod should have base subfolder (skip_base_generation = false)
+            let prod_base = build_dir.join("prod/base/docker-compose.yml");
+            assert!(prod_base.exists(), "prod should have base subfolder when skip_base_generation = false");
+            
+            // prod should have monitoring subfolder
+            let prod_monitoring = build_dir.join("prod/monitoring/docker-compose.yml");
+            assert!(prod_monitoring.exists(), "prod should have monitoring subfolder");
+        });
+    }
 }

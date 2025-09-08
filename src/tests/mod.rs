@@ -461,6 +461,32 @@ services:
         
         Ok(())
     }
+
+    /// Test version that performs real build execution in specified directory
+    #[cfg(test)]
+    pub fn execute_real_build_in_dir(working_dir: &Path) -> crate::error::Result<()> {
+        use crate::build;
+        
+        // Save current directory
+        let original_dir = std::env::current_dir().unwrap();
+        
+        // Change to working directory for build
+        std::env::set_current_dir(working_dir).map_err(|e| crate::error::FileSystemError::DirectoryReadFailed {
+            path: working_dir.to_path_buf(),
+            source: e,
+        })?;
+        
+        // Execute real build
+        let result = build::execute_build();
+        
+        // Restore original directory
+        std::env::set_current_dir(&original_dir).map_err(|e| crate::error::FileSystemError::DirectoryReadFailed {
+            path: original_dir,
+            source: e,
+        })?;
+        
+        result
+    }
     
     /// Create a basic docker-compose.yml file
     pub fn create_test_compose(path: &Path) -> std::io::Result<()> {

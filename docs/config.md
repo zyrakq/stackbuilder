@@ -54,10 +54,10 @@ Benefits of named combos:
 
 #### Build Targets
 
-Build Targets предоставляет гибкую систему фильтрации extensions и combos для конкретных environments. Основное отличие от legacy режима:
+Build Targets provides a flexible filtering system for extensions and combos per specific environments. The main difference from legacy mode:
 
-- **Legacy режим** (без `[build.targets]`): все environments получают все глобальные extensions и combos
-- **Targets режим** (с `[build.targets]`): каждый environment получает только то, что явно указано в его конфигурации + fallback для неуказанных environments
+- **Legacy mode** (without `[build.targets]`): all environments receive all global extensions and combos
+- **Targets mode** (with `[build.targets]`): each environment receives only what is explicitly specified in its configuration + fallback for unspecified environments
 
 The new `targets` configuration provides more flexible environment and combo management with selective filtering:
 
@@ -79,81 +79,23 @@ combos = ["security"]                    # Only apply security combo
 extensions = ["backup"]                  # Only apply backup extension
 combos = ["monitoring"]                  # Only apply monitoring combo
 
-# prod environment не указан в targets - получает все глобальные extensions и combos
+# prod environment not specified in targets - receives all global extensions and combos
 ```
 
-**Важное поведение targets логики:**
+**Important targets logic behavior:**
 
-- Global [`environments`](docs/config.md:23) list определяется в `[build]` секции
-- `[build.targets.{env}]` секции определяют **фильтрацию** для конкретных environments:
-  - [`extensions`](docs/config.md:24) (массив строк, опционально): Какие extensions применить к этому environment
-  - [`combos`](docs/config.md:25) (массив строк, опционально): Какие named combos применить к этому environment
-- **Fallback поведение**: Если environment включен в [`build.environments`](docs/config.md:23), но НЕ имеет конфигурации в `[build.targets.{env}]`, то к нему применяются **ВСЕ** глобальные extensions и combos
+- Global [`environments`](docs/config.md:23) list is defined in the `[build]` section
+- `[build.targets.{env}]` sections define **filtering** for specific environments:
+  - [`extensions`](docs/config.md:24) (array of strings, optional): Which extensions to apply to this environment
+  - [`combos`](docs/config.md:25) (array of strings, optional): Which named combos to apply to this environment
+  - [`skip_base_generation`](docs/config.md:32) (boolean, optional): Override global skip_base_generation for this environment
+- **Fallback behavior**: If an environment is included in [`build.environments`](docs/config.md:23) but does NOT have configuration in `[build.targets.{env}]`, then **ALL** global extensions and combos are applied to it
 
-В примере выше:
+In the example above:
 
-- `dev` получит только `logging` extension и `security` combo
-- `staging` получит только `backup` extension и `monitoring` combo
-- `prod` получит **все** глобальные extensions (`logging`, `backup`) и **все** combos (`security`, `monitoring`)
-
-### Targets Filtering Logic
-
-Targets система работает как **селективный фильтр** поверх глобальной конфигурации:
-
-#### Режимы работы
-
-1. **Legacy режим (без `[build.targets]`)**:
-   - Все environments получают все глобальные `extensions` и `combos`
-   - Простое поведение "всё для всех"
-
-2. **Targets режим (с `[build.targets]`)**:
-   - Каждый environment получает только то, что явно указано в его `[build.targets.{env}]` секции
-   - Environment без targets конфигурации получает **ВСЕ** глобальные extensions и combos (fallback)
-
-#### Практические примеры
-
-##### Пример 1: Частичная фильтрация
-
-```toml
-[build]
-environments = ["dev", "prod"]
-extensions = ["logging", "monitoring", "backup"]
-combos = { security = ["oidc", "guard"] }
-
-[build.targets.dev]
-extensions = ["logging"]  # dev получает только logging
-# combos не указаны - dev НЕ получает security combo
-```
-
-**Результат:**
-
-- `dev`: только `logging` extension (без combos)
-- `prod`: **все** extensions (`logging`, `monitoring`, `backup`) + **все** combos (`security`)
-
-##### Пример 2: Только combos
-
-```toml
-[build]
-environments = ["staging", "prod"]
-extensions = ["logging", "backup"]
-combos = { full = ["frontend", "backend", "database"] }
-
-[build.targets.staging]
-combos = ["full"]  # staging получает только full combo
-# extensions не указаны - staging НЕ получает глобальные extensions
-```
-
-**Результат:**
-
-- `staging`: только `full` combo (без individual extensions)
-- `prod`: **все** extensions (`logging`, `backup`) + **все** combos (`full`)
-
-#### Важные правила
-
-- **Явное указание**: Если в `[build.targets.{env}]` указаны `extensions` - применяются только они
-- **Явное указание**: Если в `[build.targets.{env}]` указаны `combos` - применяются только они
-- **Полное отсутствие**: Если environment отсутствует в targets - применяется всё глобальное
-- **Пустые списки**: `extensions = []` означает "никаких extensions" (не fallback)
+- `dev` will get only `logging` extension and `security` combo
+- `staging` will get only `backup` extension and `monitoring` combo
+- `prod` will get **all** global extensions (`logging`, `backup`) and **all** combos (`security`, `monitoring`)
 
 ## Validation Rules
 
@@ -234,6 +176,7 @@ pub struct BuildTargets {
 pub struct EnvironmentTarget {
     pub extensions: Option<Vec<String>>,
     pub combos: Option<Vec<String>>,
+    pub skip_base_generation: Option<bool>,
 }
 
 // Default functions
@@ -293,27 +236,7 @@ environments = ["dev", "staging", "prod"]
 extensions = ["monitoring"]
 ```
 
-### Extensions Configuration
-
-```toml
-[paths]
-extensions_dirs = ["extensions", "custom_extensions"]
-build_dir = "./build"
-
-[build]
-environments = ["test"]
-extensions = ["oidc", "guard", "monitoring"]
-
-# Define named combos
-combos = { security = ["oidc", "guard"] }
-
-# Use targets to filter specific combos per environment
-[build.targets.test]
-combos = ["security"]  # Only apply security combo to test environment
-# Результат: test получит только security combo, но все глобальные extensions
-```
-
-### Named Combos Configuration Example
+### Advanced Configuration with Named Combos and Targets
 
 ```toml
 [paths]
@@ -336,14 +259,14 @@ combos = {
 
 # Use targets for selective filtering
 [build.targets.dev]
-extensions = ["logging"]                   # dev: только logging extension
-combos = ["security", "development"]       # dev: только security и development combos
+extensions = ["logging"]                   # dev: only logging extension
+combos = ["security", "development"]       # dev: only security and development combos
 
 [build.targets.staging]
-extensions = ["backup"]                    # staging: только backup extension
-combos = ["monitoring"]                    # staging: только monitoring combo
+extensions = ["backup"]                    # staging: only backup extension
+combos = ["monitoring"]                    # staging: only monitoring combo
 
-# prod не указан в targets - получает ВСЕ глобальные extensions и combos
+# prod not specified in targets - receives ALL global extensions and combos
 ```
 
 This configuration creates the following build structure:
@@ -352,23 +275,23 @@ This configuration creates the following build structure:
 build/
 ├── dev/
 │   ├── base/docker-compose.yml
-│   ├── logging/docker-compose.yml          # Filtered: только logging extension
-│   ├── security/docker-compose.yml         # Filtered: только security combo (oidc + guard)
-│   └── development/docker-compose.yml      # Filtered: только development combo (debugging + profiling)
+│   ├── logging/docker-compose.yml          # Filtered: only logging extension
+│   ├── security/docker-compose.yml         # Filtered: only security combo (oidc + guard)
+│   └── development/docker-compose.yml      # Filtered: only development combo (debugging + profiling)
 ├── staging/
 │   ├── base/docker-compose.yml
-│   ├── backup/docker-compose.yml           # Filtered: только backup extension
-│   └── monitoring/docker-compose.yml       # Filtered: только monitoring combo (prometheus + grafana + alertmanager)
+│   ├── backup/docker-compose.yml           # Filtered: only backup extension
+│   └── monitoring/docker-compose.yml       # Filtered: only monitoring combo (prometheus + grafana + alertmanager)
 └── prod/
     ├── base/docker-compose.yml
-    ├── logging/docker-compose.yml          # Fallback: все глобальные extensions
-    ├── backup/docker-compose.yml           # Fallback: все глобальные extensions
-    ├── security/docker-compose.yml         # Fallback: все глобальные combos (oidc + guard)
-    ├── monitoring/docker-compose.yml       # Fallback: все глобальные combos (prometheus + grafana + alertmanager)
-    └── development/docker-compose.yml      # Fallback: все глобальные combos (debugging + profiling)
+    ├── logging/docker-compose.yml          # Fallback: all global extensions
+    ├── backup/docker-compose.yml           # Fallback: all global extensions
+    ├── security/docker-compose.yml         # Fallback: all global combos (oidc + guard)
+    ├── monitoring/docker-compose.yml       # Fallback: all global combos (prometheus + grafana + alertmanager)
+    └── development/docker-compose.yml      # Fallback: all global combos (debugging + profiling)
 ```
 
-**Обратите внимание**: `prod` environment получает **все** доступные варианты, потому что не имеет специфической targets конфигурации.
+**Note**: `prod` environment receives **all** available variants because it does not have specific targets configuration.
 
 ### Legacy Configuration (Backwards Compatible)
 
@@ -478,22 +401,42 @@ METRICS_ENABLED=true
 METRICS_PORT=9090
 ```
 
-### .env.example Configuration Examples
+### Configuration Examples for File Copying
 
-#### Enable .env.example merging (default)
+#### Enable .env.example merging and additional file copying (default)
 
 ```toml
 [build]
 copy_env_example = true
+copy_additional_files = true
 environments = ["dev", "prod"]
 extensions = ["oidc", "monitoring"]
 ```
 
-#### Disable .env.example merging
+#### Disable file copying features
 
 ```toml
 [build]
 copy_env_example = false
+copy_additional_files = false
+```
+
+#### Custom exclusion patterns for additional files
+
+```toml
+[build]
+copy_additional_files = true
+exclude_patterns = [
+    "docker-compose.yml",
+    ".env.example",
+    "*.tmp",
+    ".git*",
+    "node_modules",
+    "*.log",
+    "*.backup",        # Custom: exclude backup files
+    "test_*",          # Custom: exclude test files
+    "*.development"    # Custom: exclude development files
+]
 ```
 
 ## Additional Files Copying
@@ -505,7 +448,7 @@ Stackbuilder can copy additional files (configuration files, scripts, certificat
 Additional files are copied with priority-based overriding in the following order (higher priority overrides lower):
 
 1. **Base Priority (1)**: `base/*` - Files from base components (lowest priority)
-2. **Environment Priority (2)**: `environments/{env}/*` - Environment-specific files (medium priority)  
+2. **Environment Priority (2)**: `environments/{env}/*` - Environment-specific files (medium priority)
 3. **Extension Priority (3)**: `extensions/{ext}/*` - Extension-specific files (highest priority)
 
 ### File Processing Rules
@@ -525,44 +468,6 @@ exclude_patterns = [
     ".git*",              # Git files
     "node_modules",       # Node.js dependencies
     "*.log"               # Log files
-]
-```
-
-### Additional Files Configuration Examples
-
-#### Enable additional file copying (default)
-
-```toml
-[build]
-copy_additional_files = true
-environments = ["dev", "prod"]
-extensions = ["oidc", "monitoring"]
-```
-
-#### Disable additional file copying
-
-```toml
-[build]
-copy_additional_files = false
-environments = ["dev", "prod"]
-extensions = ["oidc", "monitoring"]
-```
-
-#### Custom exclusion patterns
-
-```toml
-[build]
-copy_additional_files = true
-exclude_patterns = [
-    "docker-compose.yml",
-    ".env.example", 
-    "*.tmp",
-    ".git*",
-    "node_modules",
-    "*.log",
-    "*.backup",        # Custom: exclude backup files
-    "test_*",          # Custom: exclude test files
-    "*.development"    # Custom: exclude development files
 ]
 ```
 
