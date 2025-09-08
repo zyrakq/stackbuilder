@@ -101,12 +101,6 @@ impl Default for Build {
     }
 }
 
-// Legacy support for old configuration format
-#[derive(Deserialize, Serialize, Debug, Clone)]
-pub struct EnvironmentConfig {
-    pub name: String,
-    pub extensions: Option<Vec<String>>,
-}
 
 // Default functions
 fn default_components_dir() -> String {

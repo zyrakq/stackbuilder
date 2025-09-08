@@ -80,21 +80,6 @@ Where:
   - `extensions` (array of strings, optional): Individual extensions for this environment
   - `combos` (array of strings, optional): Named combos to apply to this environment
 
-#### Per-Environment Configuration
-
-For more granular control, you can configure extensions per environment using the `[[build.environment]]` table array:
-
-```toml
-[[build.environment]]
-name = "dev"
-extensions = ["oidc", "monitoring"]
-```
-
-Where:
-
-- `name` (string, required): Environment name matching a directory in `environments_dir`
-- `extensions` (array of strings, optional): Extensions to apply to this environment
-
 ## Validation Rules
 
 1. **Existence Check**: All specified paths must exist or be creatable
@@ -177,13 +162,6 @@ pub struct EnvironmentTarget {
     pub combos: Option<Vec<String>>,
 }
 
-// Legacy support for old configuration format
-#[derive(Deserialize, Serialize, Debug, Clone)]
-pub struct EnvironmentConfig {
-    pub name: String,
-    pub extensions: Option<Vec<String>>,
-}
-
 // Default functions
 fn default_components_dir() -> String { "./components".to_string() }
 fn default_base_dir() -> String { "base".to_string() }
@@ -237,19 +215,8 @@ build_dir = "./build"
 
 [build]
 environments = ["dev", "staging", "prod"]
-
-# Per-environment extensions
-[[build.environment]]
-name = "dev"
-extensions = []
-
-[[build.environment]]
-name = "staging"
+# Global extensions applied to all environments
 extensions = ["monitoring"]
-
-[[build.environment]]
-name = "prod"
-extensions = ["monitoring", "security"]
 ```
 
 ### Extensions Configuration
