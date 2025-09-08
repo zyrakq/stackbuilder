@@ -11,7 +11,10 @@ mod tests {
         });
         assert_eq!(config_error.exit_code(), 1);
 
-        let validation_error = StackBuilderError::Validation(ValidationError::NoTargetsSpecified);
+        let validation_error = StackBuilderError::Validation(ValidationError::ExtensionNotFound {
+            name: "test".to_string(),
+            available_dirs: vec!["extensions".to_string()],
+        });
         assert_eq!(validation_error.exit_code(), 2);
 
         let build_error = StackBuilderError::Build(BuildError::BuildProcessFailed {
@@ -63,12 +66,12 @@ mod tests {
         assert!(config_error.suggestion().is_some());
         assert!(config_error.suggestion().unwrap().contains("stackbuilder init"));
 
-        let env_error = StackBuilderError::Validation(ValidationError::EnvironmentNotFound {
-            name: "dev".to_string(),
-            path: "/test".into(),
+        let ext_error = StackBuilderError::Validation(ValidationError::ExtensionNotFound {
+            name: "monitoring".to_string(),
+            available_dirs: vec!["extensions".to_string()],
         });
-        assert!(env_error.suggestion().is_some());
-        assert!(env_error.suggestion().unwrap().contains("dev"));
+        assert!(ext_error.suggestion().is_some());
+        assert!(ext_error.suggestion().unwrap().contains("monitoring"));
 
         let build_error = StackBuilderError::Build(BuildError::BuildProcessFailed {
             details: "test".to_string(),

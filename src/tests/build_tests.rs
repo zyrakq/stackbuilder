@@ -52,4 +52,88 @@ mod tests {
             assert!(!generated_files.is_empty(), "Should have generated at least one build combination");
         });
     }
+
+    #[test]
+    fn test_execute_build_minimal_config() {
+        run_in_temp_dir(|temp_path| {
+            // Create minimal config with just comment
+            let config_content = "# Minimal configuration";
+            fs::write(temp_path.join("stackbuilder.toml"), config_content).expect("Failed to write config");
+            create_test_compose(&temp_path.join("components/base/docker-compose.yml")).expect("Failed to create base compose");
+            
+            let result = create_build_executor_in_dir(temp_path);
+            
+            assert!(result.is_ok(), "BuildExecutor creation should succeed with minimal config: {:?}", result);
+            
+            let executor = result.unwrap();
+            assert_eq!(executor.num_envs, 0);
+            assert_eq!(executor.num_extensions, 0);
+        });
+    }
+
+    #[test]
+    fn test_execute_build_env_no_folder() {
+        run_in_temp_dir(|temp_path| {
+            let config_content = r#"
+[build]
+environments = ["prod"]
+"#;
+            fs::write(temp_path.join("stackbuilder.toml"), config_content).expect("Failed to write config");
+            create_test_compose(&temp_path.join("components/base/docker-compose.yml")).expect("Failed to create base compose");
+            // Don't create environments directory
+            
+            let result = create_build_executor_in_dir(temp_path);
+            
+            assert!(result.is_ok(), "BuildExecutor creation should succeed even without environments directory: {:?}", result);
+            
+            let executor = result.unwrap();
+            assert_eq!(executor.num_envs, 1);
+            assert_eq!(executor.num_extensions, 0);
+        });
+    }
+
+    #[test]
+    fn test_execute_build_ext_only() {
+        run_in_temp_dir(|temp_path| {
+            let config_content = r#"
+[build]
+extensions = ["monitoring"]
+"#;
+            fs::write(temp_path.join("stackbuilder.toml"), config_content).expect("Failed to write config");
+            create_test_compose(&temp_path.join("components/base/docker-compose.yml")).expect("Failed to create base compose");
+            create_test_compose(&temp_path.join("components/extensions/monitoring/docker-compose.yml")).expect("Failed to create extension compose");
+            
+            let result = create_build_executor_in_dir(temp_path);
+            
+            assert!(result.is_ok(), "BuildExecutor creation should succeed for extension-only config: {:?}", result);
+            
+            let executor = result.unwrap();
+            assert_eq!(executor.num_envs, 0);
+            assert_eq!(executor.num_extensions, 1);
+        });
+    }
+
+    #[test]
+    fn test_build_skip_base_generation() {
+        run_in_temp_dir(|temp_path| {
+            let config_content = r#"
+[build]
+environments = ["dev"]
+extensions = ["monitoring"]
+skip_base_generation = true
+"#;
+            fs::write(temp_path.join("stackbuilder.toml"), config_content).expect("Failed to write config");
+            create_test_compose(&temp_path.join("components/base/docker-compose.yml")).expect("Failed to create base compose");
+            create_test_compose(&temp_path.join("components/extensions/monitoring/docker-compose.yml")).expect("Failed to create extension compose");
+            
+            let result = create_build_executor_in_dir(temp_path);
+            
+            assert!(result.is_ok(), "BuildExecutor creation should succeed with skip_base_generation: {:?}", result);
+            
+            let executor = result.unwrap();
+            assert_eq!(executor.num_envs, 1);
+            assert_eq!(executor.num_extensions, 1);
+            assert!(executor.config.build.skip_base_generation);
+        });
+    }
 }

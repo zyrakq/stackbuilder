@@ -16,6 +16,7 @@ env-no-folder/
 
 ## Key Features
 
+- Minimal configuration - no `[paths]` section needed (uses defaults)
 - Environment "prod" is defined in configuration but has no specific directory
 - No `components/environments/` directory exists at all
 - stackbuilder uses only the base configuration for the environment

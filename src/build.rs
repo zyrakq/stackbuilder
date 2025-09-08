@@ -237,10 +237,13 @@ fn resolve_legacy_combinations(config: &config::Config) -> Result<Vec<BuildCombi
 
     match (num_envs, extensions.len()) {
         (0, 0) => {
-            return Err(BuildError::InvalidBuildCombination {
-                env: None,
+            // No environments and no extensions - create base-only combination
+            combinations.push(BuildCombination {
+                environment: None,
                 extensions: vec![],
-            }.into());
+                combo_names: vec![],
+                output_dir: "".to_string(), // Put directly in build root
+            });
         }
         (1, _) if !extensions.is_empty() => {
             // 1 environment with extensions

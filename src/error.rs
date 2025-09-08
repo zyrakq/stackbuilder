@@ -42,15 +42,13 @@ pub enum ConfigError {
 /// Validation-related errors
 #[derive(Error, Debug)]
 pub enum ValidationError {
-    #[error("Required directory '{path}' does not exist. Please create it or update your configuration")]
-    DirectoryNotFound { path: PathBuf },
-    
     #[error("Components directory '{path}' does not exist. Run 'stackbuilder init' to create project structure")]
     ComponentsDirectoryNotFound { path: PathBuf },
     
     #[error("Base directory '{path}' does not exist in components directory. Create base/docker-compose.yml file")]
     BaseDirectoryNotFound { path: PathBuf },
     
+    #[cfg(test)]
     #[error("Environment '{name}' does not exist in environments directory '{path}'")]
     EnvironmentNotFound { name: String, path: PathBuf },
     
@@ -62,9 +60,6 @@ pub enum ValidationError {
     
     #[error("Invalid combo definition for '{combo_name}': {details}")]
     InvalidComboDefinition { combo_name: String, details: String },
-    
-    #[error("Configuration must specify at least one environment or extension to build")]
-    NoTargetsSpecified,
     
     #[error("Invalid path resolution for '{path}': {details}")]
     PathResolutionError { path: String, details: String },
@@ -78,9 +73,6 @@ pub enum BuildError {
     
     #[error("Build process failed: {details}")]
     BuildProcessFailed { details: String },
-    
-    #[error("Invalid build combination: environment='{env:?}', extensions={extensions:?}")]
-    InvalidBuildCombination { env: Option<String>, extensions: Vec<String> },
 }
 
 /// File system operation errors
@@ -161,9 +153,6 @@ impl StackBuilderError {
             StackBuilderError::Validation(ValidationError::BaseDirectoryNotFound { .. }) => {
                 Some("Create a base/docker-compose.yml file in your components directory".to_string())
             }
-            StackBuilderError::Validation(ValidationError::EnvironmentNotFound { name, .. }) => {
-                Some(format!("Create an environment directory and docker-compose.yml file for '{}'", name))
-            }
             StackBuilderError::Validation(ValidationError::ExtensionNotFound { name, .. }) => {
                 Some(format!("Create an extension directory and docker-compose.yml file for '{}'", name))
             }
@@ -199,6 +188,7 @@ impl ConfigError {
 }
 
 impl ValidationError {
+    #[cfg(test)]
     pub fn environment_not_found(name: impl Into<String>, path: impl Into<PathBuf>) -> Self {
         Self::EnvironmentNotFound {
             name: name.into(),

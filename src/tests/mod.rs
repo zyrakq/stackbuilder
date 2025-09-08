@@ -242,38 +242,41 @@ services:
         let has_targets = config.build.targets.is_some();
 
         if !has_legacy_environments && !has_legacy_extensions && !has_combos && !has_targets {
-            return Err(ValidationError::NoTargetsSpecified.into());
+            println!("ℹ No specific targets configured - will build base configuration only");
         }
 
         // Validate combo definitions
         validate_combo_definitions_in_dir(config, working_dir)?;
 
-        // Check environments_dir if specified and not empty
+        // Check environments_dir if specified and not empty (optional - environments can exist without specific folders)
         if let Some(ref envs) = config.build.environments {
             if !envs.is_empty() {
                 let envs_path = components_path.join(&config.paths.environments_dir);
-                if !envs_path.exists() {
-                    return Err(ValidationError::DirectoryNotFound {
-                        path: envs_path,
-                    }.into());
-                }
-                for env in envs {
-                    let env_path = envs_path.join(env);
-                    if !env_path.exists() {
-                        return Err(ValidationError::environment_not_found(env, envs_path.clone()).into());
+                // Environments directory is optional - it may not exist if environments are just logical names
+                if envs_path.exists() {
+                    for env in envs {
+                        let env_path = envs_path.join(env);
+                        // Individual environment directories are also optional
+                        if env_path.exists() {
+                            println!("✓ Found environment directory: {}", env);
+                        } else {
+                            println!("ℹ Environment '{}' has no specific directory (using base only)", env);
+                        }
                     }
+                } else {
+                    println!("ℹ No environments directory found - environments will use base configuration only");
                 }
             }
         }
 
-        // Check extensions_dirs if extensions are specified
+        // Check extensions_dirs if extensions are specified (optional - extensions directories may not exist)
         if has_legacy_extensions || has_combos || has_targets {
             for ext_dir in &config.paths.extensions_dirs {
                 let ext_path = components_path.join(ext_dir);
-                if !ext_path.exists() {
-                    return Err(ValidationError::DirectoryNotFound {
-                        path: ext_path,
-                    }.into());
+                if ext_path.exists() {
+                    println!("✓ Found extensions directory: {}", ext_dir);
+                } else {
+                    println!("ℹ Extensions directory '{}' not found - no extensions will be available", ext_dir);
                 }
             }
         }
@@ -390,8 +393,8 @@ services:
         let config = load_config_from_dir(working_dir)?;
         validate_config_in_dir(&config, working_dir)?;
         
-        let available_environments = discover_environments_in_dir(&config, working_dir)?;
-        let available_extensions = discover_extensions_in_dir(&config, working_dir)?;
+        let _available_environments = discover_environments_in_dir(&config, working_dir)?;
+        let _available_extensions = discover_extensions_in_dir(&config, working_dir)?;
         
         // Create mergers with relative paths from working_dir
         let rust_merger = ComposeMerger::new(
@@ -418,13 +421,16 @@ services:
                 .collect(),
         );
         
+        let num_envs = config.build.environments.as_ref().map_or(0, |e| e.len());
+        let num_extensions = config.build.extensions.as_ref().map_or(0, |e| e.len());
+        
         Ok(crate::build::BuildExecutor {
             config,
             rust_merger,
             yq_merger,
             env_merger,
-            num_envs: available_environments.len(),
-            num_extensions: available_extensions.len(),
+            num_envs,
+            num_extensions,
         })
     }
     

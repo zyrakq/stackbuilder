@@ -160,9 +160,68 @@ extensions = []
             let config = load_config_from_dir(temp_path).expect("Failed to load config");
             let result = validate_config_in_dir(&config, temp_path);
             
-            assert!(result.is_err());
-            let error = result.unwrap_err();
-            assert!(error.to_string().contains("must specify at least one environment or extension"));
+            // Now this should succeed - no targets means base-only build
+            assert!(result.is_ok(), "Validation should succeed for base-only configuration: {:?}", result);
+        });
+    }
+
+    #[test]
+    fn test_config_optional_paths_section() {
+        run_in_temp_dir(|temp_path| {
+            let config_content = r#"
+[build]
+environments = ["dev"]
+"#;
+            
+            fs::write(temp_path.join("stackbuilder.toml"), config_content).expect("Failed to write config");
+            
+            let result = load_config_from_dir(temp_path);
+            
+            assert!(result.is_ok(), "Loading config without [paths] section should succeed");
+            let config = result.unwrap();
+            
+            // Should use defaults
+            assert_eq!(config.paths.components_dir, "./components");
+            assert_eq!(config.paths.base_dir, "base");
+        });
+    }
+
+    #[test]
+    fn test_config_optional_build_section() {
+        run_in_temp_dir(|temp_path| {
+            let config_content = r#"
+# Minimal configuration - just a comment
+"#;
+            
+            fs::write(temp_path.join("stackbuilder.toml"), config_content).expect("Failed to write config");
+            
+            let result = load_config_from_dir(temp_path);
+            
+            assert!(result.is_ok(), "Loading config without any sections should succeed");
+            let config = result.unwrap();
+            
+            // Should use defaults
+            assert_eq!(config.build.environments, None);
+            assert_eq!(config.build.extensions, None);
+        });
+    }
+
+    #[test]
+    fn test_config_validation_missing_environment_dirs_optional() {
+        run_in_temp_dir(|temp_path| {
+            let config_content = r#"
+[build]
+environments = ["prod"]
+"#;
+            
+            fs::write(temp_path.join("stackbuilder.toml"), config_content).expect("Failed to write config");
+            create_test_compose(&temp_path.join("components/base/docker-compose.yml")).expect("Failed to create base compose");
+            // Don't create environments directory - it should be optional
+            
+            let config = load_config_from_dir(temp_path).expect("Failed to load config");
+            let result = validate_config_in_dir(&config, temp_path);
+            
+            assert!(result.is_ok(), "Validation should succeed even without environments directory: {:?}", result);
         });
     }
 

@@ -15,7 +15,9 @@ pub enum YamlMergerType {
 
 #[derive(Deserialize, Serialize, Debug, Default, Clone)]
 pub struct Config {
+    #[serde(default)]
     pub paths: Paths,
+    #[serde(default)]
     pub build: Build,
 }
 
@@ -207,7 +209,7 @@ pub fn validate_config(config: &Config) -> Result<()> {
     let has_targets = config.build.targets.is_some();
 
     if !has_legacy_environments && !has_legacy_extensions && !has_combos && !has_targets {
-        return Err(ValidationError::NoTargetsSpecified.into());
+        println!("ℹ No specific targets configured - will build base configuration only");
     }
 
     // Validate combo definitions
@@ -239,14 +241,14 @@ pub fn validate_config(config: &Config) -> Result<()> {
         validate_build_targets(config, targets)?;
     }
 
-    // Check extensions_dirs if extensions are specified
+    // Check extensions_dirs if extensions are specified (optional - extensions directories may not exist)
     if has_legacy_extensions || has_combos || has_targets {
         for ext_dir in &config.paths.extensions_dirs {
             let ext_path = components_path.join(ext_dir);
-            if !ext_path.exists() {
-                return Err(ValidationError::DirectoryNotFound {
-                    path: ext_path,
-                }.into());
+            if ext_path.exists() {
+                println!("✓ Found extensions directory: {}", ext_dir);
+            } else {
+                println!("ℹ Extensions directory '{}' not found - no extensions will be available", ext_dir);
             }
         }
     }
