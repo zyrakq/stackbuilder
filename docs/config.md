@@ -29,6 +29,7 @@ Defines the build rules and configurations.
 - `exclude_patterns` (array of strings, default: `["docker-compose.yml", ".env.example", "*.tmp", ".git*", "node_modules", "*.log"]`): Glob patterns for files to exclude from additional file copying
 - `preserve_env_files` (boolean, default: `true`): Enable intelligent preservation of existing .env files during build directory cleanup
 - `env_file_patterns` (array of strings, default: `[".env", ".env.local", ".env.production"]`): Patterns for .env files to preserve during smart cleanup
+- `skip_base_generation` (boolean, default: `false`): Skip generation of base configuration variants, useful for extension-only or combo-only scenarios
 
 #### Named Combos
 
@@ -159,6 +160,8 @@ pub struct Build {
     pub preserve_env_files: bool,
     #[serde(default = "default_env_file_patterns")]
     pub env_file_patterns: Vec<String>,
+    #[serde(default = "default_skip_base_generation")]
+    pub skip_base_generation: bool,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -207,6 +210,7 @@ fn default_env_file_patterns() -> Vec<String> {
         ".env.production".to_string(),
     ]
 }
+fn default_skip_base_generation() -> bool { false }
 ```
 
 ## Configuration Examples
@@ -337,7 +341,55 @@ build_dir = "./build"
 [build]
 environments = ["dev", "test", "staging", "prod"]
 extensions = ["basic_auth"]  # Global extensions
+
+# Combos are also supported in legacy format
+combos = { security = ["oidc", "guard"], monitoring = ["prometheus", "grafana"] }
+skip_base_generation = false  # Control base configuration generation
 ```
+
+#### Legacy Combo Behavior
+
+In legacy configuration (without `[build.targets]`), combos are automatically applied to all environments:
+
+- **Single Environment**: Creates subfolders without environment prefix: `base/`, `extension/`, `combo/`
+- **Multiple Environments**: Creates subfolders with environment prefix: `env/base/`, `env/extension/`, `env/combo/`
+- **Skip Base Generation**: When `skip_base_generation = true`, only extension/combo variants are created
+
+#### Skip Base Generation Examples
+
+**Extension-only with skip_base_generation:**
+
+```toml
+[build]
+environments = ["prod"]
+extensions = ["monitoring"]
+skip_base_generation = true
+```
+
+Output: `build/docker-compose.yml` (single file, no subfolders)
+
+**Combo-only with skip_base_generation:**
+
+```toml
+[build]
+environments = ["prod"]
+skip_base_generation = true
+combos = { fullstack = ["frontend", "backend", "database"] }
+```
+
+Output: `build/docker-compose.yml` (combo merged directly)
+
+**Multiple variants with skip_base_generation:**
+
+```toml
+[build]
+environments = ["prod"]
+extensions = ["logging"]
+combos = { security = ["oidc", "guard"] }
+skip_base_generation = true
+```
+
+Output: `build/logging/` and `build/security/` (no base/ subfolder)
 
 This configuration provides flexible component assembly while maintaining intuitive defaults for quick setup.
 

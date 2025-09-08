@@ -1,0 +1,14 @@
+version: '3.8'
+services:
+  app:
+    image: nginx:latest
+    ports:
+      - "80:80"
+  oidc:
+    image: keycloak:latest
+    ports:
+      - "8080:8080"
+  guard:
+    image: oauth2-proxy:latest
+    ports:
+      - "4180:4180"

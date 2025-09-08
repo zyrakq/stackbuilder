@@ -136,4 +136,86 @@ skip_base_generation = true
             assert!(executor.config.build.skip_base_generation);
         });
     }
+
+    #[test]
+    fn test_legacy_combo_support() {
+        run_in_temp_dir(|temp_path| {
+            // Create config with combos in legacy format
+            let config_content = r#"
+[build]
+environments = ["dev"]
+extensions = ["logging"]
+combos = { security = ["oidc", "guard"] }
+"#;
+            fs::write(temp_path.join("stackbuilder.toml"), config_content).expect("Failed to write config");
+
+            // Create component structure
+            let base_compose = r#"
+version: '3.8'
+services:
+  app:
+    image: nginx:latest
+"#;
+            fs::create_dir_all(temp_path.join("components/base")).expect("Failed to create base dir");
+            fs::write(temp_path.join("components/base/docker-compose.yml"), base_compose).expect("Failed to write base compose");
+
+            // Create extensions
+            fs::create_dir_all(temp_path.join("components/extensions/logging")).expect("Failed to create logging dir");
+            fs::write(temp_path.join("components/extensions/logging/docker-compose.yml"), base_compose).expect("Failed to write logging compose");
+            
+            fs::create_dir_all(temp_path.join("components/extensions/oidc")).expect("Failed to create oidc dir");
+            fs::write(temp_path.join("components/extensions/oidc/docker-compose.yml"), base_compose).expect("Failed to write oidc compose");
+            
+            fs::create_dir_all(temp_path.join("components/extensions/guard")).expect("Failed to create guard dir");
+            fs::write(temp_path.join("components/extensions/guard/docker-compose.yml"), base_compose).expect("Failed to write guard compose");
+
+            // Test that BuildExecutor can be created and combo is processed
+            let executor = create_build_executor_in_dir(temp_path).expect("Failed to create build executor");
+            
+            // Should have 1 env, 1 extension, 1 combo
+            assert_eq!(executor.num_envs, 1);
+            assert_eq!(executor.num_extensions, 1);
+            assert_eq!(executor.num_combos, 1);
+        });
+    }
+
+    #[test]
+    fn test_combo_only_with_skip_base() {
+        run_in_temp_dir(|temp_path| {
+            // Create config with combo only + skip_base_generation
+            let config_content = r#"
+[build]
+environments = ["prod"]
+skip_base_generation = true
+combos = { fullstack = ["frontend", "backend"] }
+"#;
+            fs::write(temp_path.join("stackbuilder.toml"), config_content).expect("Failed to write config");
+
+            // Create component structure
+            let base_compose = r#"
+version: '3.8'
+services:
+  app:
+    image: nginx:latest
+"#;
+            fs::create_dir_all(temp_path.join("components/base")).expect("Failed to create base dir");
+            fs::write(temp_path.join("components/base/docker-compose.yml"), base_compose).expect("Failed to write base compose");
+
+            // Create extensions for combo
+            fs::create_dir_all(temp_path.join("components/extensions/frontend")).expect("Failed to create frontend dir");
+            fs::write(temp_path.join("components/extensions/frontend/docker-compose.yml"), base_compose).expect("Failed to write frontend compose");
+            
+            fs::create_dir_all(temp_path.join("components/extensions/backend")).expect("Failed to create backend dir");
+            fs::write(temp_path.join("components/extensions/backend/docker-compose.yml"), base_compose).expect("Failed to write backend compose");
+
+            // Test that BuildExecutor can be created with skip_base_generation
+            let executor = create_build_executor_in_dir(temp_path).expect("Failed to create build executor");
+            
+            // Should have 1 env, 0 direct extensions, 1 combo
+            assert_eq!(executor.num_envs, 1);
+            assert_eq!(executor.num_extensions, 0);
+            assert_eq!(executor.num_combos, 1);
+            assert!(executor.config.build.skip_base_generation);
+        });
+    }
 }

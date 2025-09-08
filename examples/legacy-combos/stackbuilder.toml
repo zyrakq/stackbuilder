@@ -1,0 +1,6 @@
+[build]
+environments = ["dev"]
+extensions = ["logging"]
+
+# Define combos
+combos = { security = ["oidc", "guard"] }

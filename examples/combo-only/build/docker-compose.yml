@@ -1,0 +1,20 @@
+version: '3.8'
+services:
+  app:
+    image: nginx:latest
+    ports:
+      - "80:80"
+  frontend:
+    image: react:latest
+    ports:
+      - "3000:3000"
+  backend:
+    image: node:latest
+    ports:
+      - "4000:4000"
+  database:
+    image: postgres:latest
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: myapp

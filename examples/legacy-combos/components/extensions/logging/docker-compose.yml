@@ -1,0 +1,7 @@
+version: '3.8'
+
+services:
+  logging:
+    image: logstash:latest
+    ports:
+      - "5000:5000"

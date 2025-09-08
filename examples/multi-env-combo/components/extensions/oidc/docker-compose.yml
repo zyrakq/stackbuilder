@@ -1,0 +1,7 @@
+version: '3.8'
+
+services:
+  oidc:
+    image: keycloak:latest
+    ports:
+      - "8080:8080"

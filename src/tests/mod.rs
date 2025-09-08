@@ -423,6 +423,7 @@ services:
         
         let num_envs = config.build.environments.as_ref().map_or(0, |e| e.len());
         let num_extensions = config.build.extensions.as_ref().map_or(0, |e| e.len());
+        let num_combos = config.build.combos.len();
         
         Ok(crate::build::BuildExecutor {
             config,
@@ -431,6 +432,7 @@ services:
             env_merger,
             num_envs,
             num_extensions,
+            num_combos,
         })
     }
     

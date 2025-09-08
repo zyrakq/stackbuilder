@@ -1,0 +1,7 @@
+version: '3.8'
+
+services:
+  guard:
+    image: oauth2-proxy:latest
+    ports:
+      - "4180:4180"
