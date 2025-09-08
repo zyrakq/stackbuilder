@@ -221,8 +221,8 @@ impl BuildCleaner {
     fn is_env_file(&self, path: &Path) -> bool {
         if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
             self.env_file_patterns.iter().any(|pattern| {
-                // Simple pattern matching - can be enhanced with glob patterns
-                filename == pattern || filename.starts_with(&format!("{}.", pattern))
+                // Exact match only - no partial matching or extensions
+                filename == pattern
             })
         } else {
             false
