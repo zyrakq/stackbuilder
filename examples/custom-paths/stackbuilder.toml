@@ -6,5 +6,11 @@ extensions_dirs = ["addons", "plugins", "modules"]
 build_dir = "./output"
 
 [build]
-environments = ["dev", "qa"]
+[build.environments]
+available = ["dev", "qa"]
+
+[build.environments.dev]
+extensions = ["cache", "security"]
+
+[build.environments.qa]
 extensions = ["cache", "security"]

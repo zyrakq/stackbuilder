@@ -6,5 +6,5 @@ extensions_dirs = []
 build_dir = "./build"
 
 [build]
-environments = ["prod"]
-extensions = []
+[build.environments]
+available = ["prod"]

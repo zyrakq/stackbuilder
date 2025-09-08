@@ -222,17 +222,19 @@ services:
     #[test]
     fn test_per_environment_skip_base_generation() {
         run_in_temp_dir(|temp_path| {
-            // Create config with per-environment skip_base_generation
+            // Create config with per-environment skip_base_generation using new API
             let config_content = r#"
 [build]
-environments = ["dev", "prod"]
 skip_base_generation = false  # Global default
 
-[build.targets.dev]
+[build.environments]
+available = ["dev", "prod"]
+
+[build.environments.dev]
 extensions = ["monitoring"]
 skip_base_generation = true   # dev skips base
 
-[build.targets.prod]
+[build.environments.prod]
 extensions = ["monitoring"]
 skip_base_generation = false  # prod includes base
 "#;

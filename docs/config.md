@@ -20,10 +20,8 @@ Defines the file system paths used by stackbuilder.
 
 Defines the build rules and configurations.
 
-- `environments` (array of strings, optional): List of environment names to build. If omitted, all found environments are built.
-- `extensions` (array of strings, optional): Global list of extensions to apply to all environments. Alternative to per-environment configuration.
 - `combos` (table, optional): Named combinations of extensions (see Named Combos section below)
-- `targets` (table, optional): New-style target configuration supporting named combos (see Build Targets section below)
+- `environments` (table, optional): Environments configuration section (see Build Environments section below)
 - `copy_env_example` (boolean, default: `true`): Enable merging of .env.example files from components into output directories
 - `copy_additional_files` (boolean, default: `true`): Enable copying of additional files (configs, scripts, certificates) from components with priority-based overriding
 - `exclude_patterns` (array of strings, default: `["docker-compose.yml", ".env.example", "*.tmp", ".git*", "node_modules", "*.log"]`): Glob patterns for files to exclude from additional file copying
@@ -52,50 +50,183 @@ Benefits of named combos:
 - **Readability**: Semantic names instead of extension lists
 - **Consistency**: Ensure same extension combinations across environments
 
-#### Build Targets
+#### Build Environments
 
-Build Targets provides a flexible filtering system for extensions and combos per specific environments. The main difference from legacy mode:
-
-- **Legacy mode** (without `[build.targets]`): all environments receive all global extensions and combos
-- **Targets mode** (with `[build.targets]`): each environment receives only what is explicitly specified in its configuration + fallback for unspecified environments
-
-The new `targets` configuration provides more flexible environment and combo management with selective filtering:
+The `[build.environments]` configuration provides an intuitive way to manage environments and their specific configurations:
 
 ```toml
 [build]
-environments = ["dev", "staging", "prod"]
-extensions = ["logging", "backup"]       # Global extensions
+# Define named combos
 combos = {
     security = ["oidc", "guard"],
     monitoring = ["prometheus", "grafana"]
 }
 
-# Per-environment filtering (optional)
-[build.targets.dev]
-extensions = ["logging"]                 # Only apply logging extension
-combos = ["security"]                    # Only apply security combo
+# Environments API
+[build.environments]
+available = ["dev", "staging", "prod"]
 
-[build.targets.staging]
-extensions = ["backup"]                  # Only apply backup extension
-combos = ["monitoring"]                  # Only apply monitoring combo
+# Per-environment configurations
+[build.environments.dev]
+extensions = ["logging"]                 # Apply logging extension to dev
+combos = ["security"]                    # Apply security combo to dev
+skip_base_generation = true             # Skip base generation for dev
 
-# prod environment not specified in targets - receives all global extensions and combos
+[build.environments.staging]
+extensions = ["backup"]                  # Apply backup extension to staging
+combos = ["monitoring"]                  # Apply monitoring combo to staging
+
+[build.environments.prod]
+combos = ["security", "monitoring"]      # Apply both combos to prod
 ```
 
-**Important targets logic behavior:**
+**API structure:**
 
-- Global [`environments`](docs/config.md:23) list is defined in the `[build]` section
-- `[build.targets.{env}]` sections define **filtering** for specific environments:
-  - [`extensions`](docs/config.md:24) (array of strings, optional): Which extensions to apply to this environment
-  - [`combos`](docs/config.md:25) (array of strings, optional): Which named combos to apply to this environment
-  - [`skip_base_generation`](docs/config.md:32) (boolean, optional): Override global skip_base_generation for this environment
-- **Fallback behavior**: If an environment is included in [`build.environments`](docs/config.md:23) but does NOT have configuration in `[build.targets.{env}]`, then **ALL** global extensions and combos are applied to it
+- `[build.environments]` - Main environments configuration section
+  - `available` (array of strings): List of available environment names
+- `[build.environments.{env}]` - Per-environment configuration sections:
+  - `extensions` (array of strings, optional): Extensions to apply to this environment
+  - `combos` (array of strings, optional): Named combos to apply to this environment
+  - `skip_base_generation` (boolean, optional): Override global skip_base_generation for this environment
 
-In the example above:
+## Configuration Examples
 
-- `dev` will get only `logging` extension and `security` combo
-- `staging` will get only `backup` extension and `monitoring` combo
-- `prod` will get **all** global extensions (`logging`, `backup`) and **all** combos (`security`, `monitoring`)
+### Minimal Configuration (Base Only)
+
+```toml
+[paths]
+components_dir = "./components"
+base_dir = "base"
+build_dir = "./build"
+
+[build]
+# No environments or extensions - only base components
+```
+
+### Multi-Environment Configuration
+
+```toml
+[paths]
+components_dir = "./components"
+environments_dir = "environments"
+build_dir = "./build"
+
+[build]
+[build.environments]
+available = ["dev", "staging", "prod"]
+
+[build.environments.dev]
+extensions = ["monitoring"]
+
+[build.environments.staging]
+extensions = ["monitoring"]
+
+[build.environments.prod]
+extensions = ["monitoring"]
+```
+
+### Advanced Configuration with Named Combos
+
+```toml
+[paths]
+components_dir = "./components"
+base_dir = "base"
+environments_dir = "environments"
+extensions_dirs = ["extensions"]
+build_dir = "./build"
+
+[build]
+# Define named combos
+combos = {
+    security = ["oidc", "guard"],
+    monitoring = ["prometheus", "grafana", "alertmanager"],
+    development = ["debugging", "profiling"]
+}
+
+# Environments API
+[build.environments]
+available = ["dev", "staging", "prod"]
+
+# Per-environment configurations
+[build.environments.dev]
+extensions = ["logging"]                   # dev: only logging extension
+combos = ["security", "development"]       # dev: only security and development combos
+skip_base_generation = true               # dev: skip base generation
+
+[build.environments.staging]
+extensions = ["backup"]                    # staging: only backup extension
+combos = ["monitoring"]                    # staging: only monitoring combo
+
+[build.environments.prod]
+combos = ["security", "monitoring"]        # prod: only specified combos
+```
+
+This configuration creates the following build structure:
+
+```sh
+build/
+├── dev/
+│   ├── logging/docker-compose.yml          # Only logging extension (base skipped)
+│   ├── security/docker-compose.yml         # Only security combo (oidc + guard)
+│   └── development/docker-compose.yml      # Only development combo (debugging + profiling)
+├── staging/
+│   ├── base/docker-compose.yml             # Base included
+│   ├── backup/docker-compose.yml           # Only backup extension
+│   └── monitoring/docker-compose.yml       # Only monitoring combo (prometheus + grafana + alertmanager)
+└── prod/
+    ├── base/docker-compose.yml             # Base included
+    ├── security/docker-compose.yml         # Only security combo (oidc + guard)
+    └── monitoring/docker-compose.yml       # Only monitoring combo (prometheus + grafana + alertmanager)
+```
+
+#### Skip Base Generation Examples
+
+**Extension-only with skip_base_generation:**
+
+```toml
+[build]
+[build.environments]
+available = ["prod"]
+
+[build.environments.prod]
+extensions = ["monitoring"]
+skip_base_generation = true
+```
+
+Output: `build/docker-compose.yml` (single file, no subfolders)
+
+**Combo-only with skip_base_generation:**
+
+```toml
+[build]
+combos = { fullstack = ["frontend", "backend", "database"] }
+
+[build.environments]
+available = ["prod"]
+
+[build.environments.prod]
+combos = ["fullstack"]
+skip_base_generation = true
+```
+
+Output: `build/docker-compose.yml` (combo merged directly)
+
+**Multiple variants with skip_base_generation:**
+
+```toml
+[build]
+combos = { security = ["oidc", "guard"] }
+
+[build.environments]
+available = ["prod"]
+
+[build.environments.prod]
+extensions = ["logging"]
+combos = ["security"]
+skip_base_generation = true
+```
+
+Output: `build/logging/` and `build/security/` (no base/ subfolder)
 
 ## Validation Rules
 
@@ -147,11 +278,13 @@ pub struct Paths {
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Build {
-    pub environments: Option<Vec<String>>,
     pub extensions: Option<Vec<String>>,
     #[serde(default)]
     pub combos: HashMap<String, Vec<String>>,
-    pub targets: Option<BuildTargets>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub environments_config: Option<BuildEnvironments>,
+    #[serde(default)]
+    pub yaml_merger: YamlMergerType,
     #[serde(default = "default_copy_env_example")]
     pub copy_env_example: bool,
     #[serde(default = "default_copy_additional_files")]
@@ -167,196 +300,19 @@ pub struct Build {
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
-pub struct BuildTargets {
+pub struct BuildEnvironments {
+    pub available: Option<Vec<String>>,
     #[serde(flatten)]
-    pub environment_configs: HashMap<String, EnvironmentTarget>,
+    pub environment_configs: HashMap<String, EnvironmentConfig>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
-pub struct EnvironmentTarget {
+pub struct EnvironmentConfig {
     pub extensions: Option<Vec<String>>,
     pub combos: Option<Vec<String>>,
     pub skip_base_generation: Option<bool>,
 }
-
-// Default functions
-fn default_components_dir() -> String { "./components".to_string() }
-fn default_base_dir() -> String { "base".to_string() }
-fn default_environments_dir() -> String { "environments".to_string() }
-fn default_extensions_dirs() -> Vec<String> { vec!["extensions".to_string()] }
-fn default_build_dir() -> String { "./build".to_string() }
-fn default_copy_env_example() -> bool { true }
-fn default_copy_additional_files() -> bool { true }
-fn default_exclude_patterns() -> Vec<String> {
-    vec![
-        "docker-compose.yml".to_string(),
-        ".env.example".to_string(),
-        "*.tmp".to_string(),
-        ".git*".to_string(),
-        "node_modules".to_string(),
-        "*.log".to_string(),
-    ]
-}
-fn default_preserve_env_files() -> bool { true }
-fn default_env_file_patterns() -> Vec<String> {
-    vec![
-        ".env".to_string(),
-        ".env.local".to_string(),
-        ".env.production".to_string(),
-    ]
-}
-fn default_skip_base_generation() -> bool { false }
 ```
-
-## Configuration Examples
-
-### Minimal Configuration (Base Only)
-
-```toml
-[paths]
-components_dir = "./components"
-base_dir = "base"
-build_dir = "./build"
-
-[build]
-# No environments or extensions - only base components
-```
-
-### Multi-Environment Configuration
-
-```toml
-[paths]
-components_dir = "./components"
-environments_dir = "environments"
-build_dir = "./build"
-
-[build]
-environments = ["dev", "staging", "prod"]
-# Global extensions applied to all environments
-extensions = ["monitoring"]
-```
-
-### Advanced Configuration with Named Combos and Targets
-
-```toml
-[paths]
-components_dir = "./components"
-base_dir = "base"
-environments_dir = "environments"
-extensions_dirs = ["extensions"]
-build_dir = "./build"
-
-[build]
-environments = ["dev", "staging", "prod"]  # Global environments list
-extensions = ["logging", "backup"]         # Global extensions
-
-# Define named combos
-combos = {
-    security = ["oidc", "guard"],
-    monitoring = ["prometheus", "grafana", "alertmanager"],
-    development = ["debugging", "profiling"]
-}
-
-# Use targets for selective filtering
-[build.targets.dev]
-extensions = ["logging"]                   # dev: only logging extension
-combos = ["security", "development"]       # dev: only security and development combos
-
-[build.targets.staging]
-extensions = ["backup"]                    # staging: only backup extension
-combos = ["monitoring"]                    # staging: only monitoring combo
-
-# prod not specified in targets - receives ALL global extensions and combos
-```
-
-This configuration creates the following build structure:
-
-```sh
-build/
-├── dev/
-│   ├── base/docker-compose.yml
-│   ├── logging/docker-compose.yml          # Filtered: only logging extension
-│   ├── security/docker-compose.yml         # Filtered: only security combo (oidc + guard)
-│   └── development/docker-compose.yml      # Filtered: only development combo (debugging + profiling)
-├── staging/
-│   ├── base/docker-compose.yml
-│   ├── backup/docker-compose.yml           # Filtered: only backup extension
-│   └── monitoring/docker-compose.yml       # Filtered: only monitoring combo (prometheus + grafana + alertmanager)
-└── prod/
-    ├── base/docker-compose.yml
-    ├── logging/docker-compose.yml          # Fallback: all global extensions
-    ├── backup/docker-compose.yml           # Fallback: all global extensions
-    ├── security/docker-compose.yml         # Fallback: all global combos (oidc + guard)
-    ├── monitoring/docker-compose.yml       # Fallback: all global combos (prometheus + grafana + alertmanager)
-    └── development/docker-compose.yml      # Fallback: all global combos (debugging + profiling)
-```
-
-**Note**: `prod` environment receives **all** available variants because it does not have specific targets configuration.
-
-### Legacy Configuration (Backwards Compatible)
-
-```toml
-[paths]
-components_dir = "./components"
-base_dir = "base"
-environments_dir = "environments"
-extensions_dirs = ["extensions", "community_extensions"]
-build_dir = "./build"
-
-[build]
-environments = ["dev", "test", "staging", "prod"]
-extensions = ["basic_auth"]  # Global extensions
-
-# Combos are also supported in legacy format
-combos = { security = ["oidc", "guard"], monitoring = ["prometheus", "grafana"] }
-skip_base_generation = false  # Control base configuration generation
-```
-
-#### Legacy Combo Behavior
-
-In legacy configuration (without `[build.targets]`), combos are automatically applied to all environments:
-
-- **Single Environment**: Creates subfolders without environment prefix: `base/`, `extension/`, `combo/`
-- **Multiple Environments**: Creates subfolders with environment prefix: `env/base/`, `env/extension/`, `env/combo/`
-- **Skip Base Generation**: When `skip_base_generation = true`, only extension/combo variants are created
-
-#### Skip Base Generation Examples
-
-**Extension-only with skip_base_generation:**
-
-```toml
-[build]
-environments = ["prod"]
-extensions = ["monitoring"]
-skip_base_generation = true
-```
-
-Output: `build/docker-compose.yml` (single file, no subfolders)
-
-**Combo-only with skip_base_generation:**
-
-```toml
-[build]
-environments = ["prod"]
-skip_base_generation = true
-combos = { fullstack = ["frontend", "backend", "database"] }
-```
-
-Output: `build/docker-compose.yml` (combo merged directly)
-
-**Multiple variants with skip_base_generation:**
-
-```toml
-[build]
-environments = ["prod"]
-extensions = ["logging"]
-combos = { security = ["oidc", "guard"] }
-skip_base_generation = true
-```
-
-Output: `build/logging/` and `build/security/` (no base/ subfolder)
-
-This configuration provides flexible component assembly while maintaining intuitive defaults for quick setup.
 
 ## Environment Variables Merging (.env.example)
 
@@ -371,36 +327,6 @@ Environment variables are merged in the following priority order (later sources 
 3. `extensions/{ext1}/.env.example` - Extension variables (in order specified)
 4. `extensions/{ext2}/.env.example` - Additional extension variables
 
-### Merge Behavior
-
-- **Variable Overriding**: Later files override variables from earlier files with the same name
-- **Comment Preservation**: Comments from all source files are preserved and organized by source
-- **Missing Files**: Missing `.env.example` files are silently skipped (not an error)
-- **File Structure**: Generated files include headers indicating source files and organization
-
-### Generated .env.example Format
-
-```bash
-# Generated by stackbuilder from multiple .env.example files
-# Source files: base, dev, oidc, monitoring
-
-# Variables from base/.env.example
-APP_NAME=myapp
-APP_VERSION=1.0.0
-
-# Variables from environments/dev/.env.example  
-DEBUG=true
-LOG_LEVEL=debug
-
-# Variables from extensions/oidc/.env.example
-OIDC_CLIENT_ID=your_client_id
-OIDC_CLIENT_SECRET=your_client_secret
-
-# Variables from extensions/monitoring/.env.example
-METRICS_ENABLED=true
-METRICS_PORT=9090
-```
-
 ### Configuration Examples for File Copying
 
 #### Enable .env.example merging and additional file copying (default)
@@ -409,8 +335,15 @@ METRICS_PORT=9090
 [build]
 copy_env_example = true
 copy_additional_files = true
-environments = ["dev", "prod"]
-extensions = ["oidc", "monitoring"]
+
+[build.environments]
+available = ["dev", "prod"]
+
+[build.environments.dev]
+extensions = ["oidc"]
+
+[build.environments.prod]
+extensions = ["monitoring"]
 ```
 
 #### Disable file copying features
@@ -419,24 +352,6 @@ extensions = ["oidc", "monitoring"]
 [build]
 copy_env_example = false
 copy_additional_files = false
-```
-
-#### Custom exclusion patterns for additional files
-
-```toml
-[build]
-copy_additional_files = true
-exclude_patterns = [
-    "docker-compose.yml",
-    ".env.example",
-    "*.tmp",
-    ".git*",
-    "node_modules",
-    "*.log",
-    "*.backup",        # Custom: exclude backup files
-    "test_*",          # Custom: exclude test files
-    "*.development"    # Custom: exclude development files
-]
 ```
 
 ## Additional Files Copying
@@ -451,69 +366,6 @@ Additional files are copied with priority-based overriding in the following orde
 2. **Environment Priority (2)**: `environments/{env}/*` - Environment-specific files (medium priority)
 3. **Extension Priority (3)**: `extensions/{ext}/*` - Extension-specific files (highest priority)
 
-### File Processing Rules
-
-- **Priority Override**: Higher priority files replace lower priority files with the same relative path
-- **Directory Structure**: Original directory structure is preserved in the output
-- **Permissions**: File permissions are preserved during copying (Unix systems)
-- **Exclusion Patterns**: Files matching `exclude_patterns` are automatically skipped
-
-### Default Exclusion Patterns
-
-```toml
-exclude_patterns = [
-    "docker-compose.yml",  # Already handled by docker-compose merging
-    ".env.example",        # Already handled by env merging
-    "*.tmp",              # Temporary files
-    ".git*",              # Git files
-    "node_modules",       # Node.js dependencies
-    "*.log"               # Log files
-]
-```
-
-### File Priority Examples
-
-Consider this component structure:
-
-```log
-components/
-├── base/
-│   ├── config.json          # Priority 1 (Base)
-│   └── scripts/setup.sh     # Priority 1 (Base)
-├── environments/dev/
-│   ├── config.json          # Priority 2 (Environment) - overrides base
-│   └── nginx.conf           # Priority 2 (Environment) - new file
-└── extensions/auth/
-    ├── auth.conf            # Priority 3 (Extension) - new file
-    └── config.json          # Priority 3 (Extension) - overrides all
-```
-
-**Result in build output:**
-
-- `config.json` → Contains content from `extensions/auth/config.json` (highest priority)
-- `scripts/setup.sh` → Contains content from `base/scripts/setup.sh` (only source)
-- `nginx.conf` → Contains content from `environments/dev/nginx.conf` (only source)
-- `auth.conf` → Contains content from `extensions/auth/auth.conf` (only source)
-
-### Processing Log Output
-
-During the build process, stackbuilder logs file copying operations:
-
-```log
-Copying additional files...
-  File config.json found from base (priority: Base)
-  File config.json: environment:dev overrides base (priority: Environment > Base)
-  File config.json: extension:auth overrides environment:dev (priority: Extension > Environment)
-  File scripts/setup.sh found from base (priority: Base)
-  File nginx.conf found from environment:dev (priority: Environment)
-  File auth.conf found from extension:auth (priority: Extension)
-  Copied: config.json -> ./build/dev/auth/config.json (from extension:auth)
-  Copied: scripts/setup.sh -> ./build/dev/auth/scripts/setup.sh (from base)
-  Copied: nginx.conf -> ./build/dev/auth/nginx.conf (from environment:dev)
-  Copied: auth.conf -> ./build/dev/auth/auth.conf (from extension:auth)
-Additional file copying completed
-```
-
 ### File Location Guidelines
 
 Place additional files alongside `docker-compose.yml` files in component directories:
@@ -522,50 +374,9 @@ Place additional files alongside `docker-compose.yml` files in component directo
 - `components/environments/{env}/` - Environment-specific configs (nginx.conf, app.conf)
 - `components/extensions/{ext}/` - Extension-specific configs (auth.conf, ssl certificates)
 
-### Usage Notes
-
-- Files are copied after docker-compose and .env merging is complete
-- Missing component directories are silently skipped (not an error)
-- Symbolic links are followed and the target files are copied
-- Binary files are supported and copied without modification
-- Large files may impact build performance - consider using exclusion patterns
-
-### .env.example File Locations
-
-Place `.env.example` files alongside `docker-compose.yml` files in:
-
-- `components/base/.env.example` - Base variables
-- `components/environments/{env}/.env.example` - Environment-specific variables
-- `components/extensions/{ext}/.env.example` - Extension-specific variables
-
-### .env.example Processing Notes
-
-- Variables with spaces or special characters are automatically quoted
-- Empty variables are preserved with empty quotes: `VAR=""`
-- Comments starting with `#` are preserved from all source files
-- Output `.env.example` files are placed in the same directories as generated `docker-compose.yml` files
-
 ## Intelligent .env Files Preservation
 
 Stackbuilder includes an intelligent build directory cleanup system that preserves existing `.env` files during rebuilds when the `preserve_env_files` option is enabled (default: `true`).
-
-### Smart Cleanup Process
-
-When rebuilding, stackbuilder performs the following intelligent cleanup workflow:
-
-1. **Scan Phase**: Scan the entire build directory for existing `.env` files matching configured patterns
-2. **Preservation Phase**: Create temporary backup of found `.env` files with metadata (original paths, content, detected environment/extension info)
-3. **Cleanup Phase**: Completely remove the build directory to ensure clean rebuild
-4. **Restoration Phase**: Restore `.env` files to appropriate locations in the new build structure using intelligent path mapping
-
-### Path Mapping Intelligence
-
-The system uses heuristics to map old `.env` file locations to new build structure:
-
-- **Environment Detection**: Analyze file paths to detect environment names (e.g., `dev`, `production`, `staging`)
-- **Extension Detection**: Detect extension names from directory structure (e.g., `auth`, `monitoring`, `oidc`)
-- **Confidence Scoring**: Calculate mapping confidence based on path similarity and component matching
-- **Fallback Strategy**: Use fallback locations for low-confidence mappings to prevent data loss
 
 ### Configuration Options
 
@@ -578,101 +389,6 @@ env_file_patterns = [".env", ".env.local", ".env.production"]
 ```
 
 #### Disable .env preservation
-
-```toml
-[build]
-preserve_env_files = false
-```
-
-#### Custom .env file patterns
-
-```toml
-[build]
-preserve_env_files = true
-env_file_patterns = [
-    ".env",
-    ".env.local",
-    ".env.development",
-    ".env.staging",
-    ".env.production",
-    ".env.test"
-]
-```
-
-### Restoration Examples
-
-#### Scenario 1: Environment Renaming
-
-```log
-# Before: dev → development
-build/dev/.env → build/development/.env
-
-# Before: prod → production
-build/prod/auth/.env → build/production/auth/.env
-```
-
-#### Scenario 2: Extension Changes
-
-```log
-# Before: security combo → individual extensions
-build/dev/security/.env → build/dev/oidc/.env (first extension in combo)
-
-# Before: individual → combo
-build/dev/auth/.env → build/dev/security/.env (combo containing auth)
-```
-
-#### Scenario 3: Fallback Handling
-
-```log
-# Before: unknown structure → fallback location
-build/unknown/.env → build/.env.backup.unknown
-```
-
-### Build Log Output
-
-During intelligent cleanup, stackbuilder provides detailed logging:
-
-```log
-Starting intelligent build directory cleanup with .env preservation
-Found .env file: dev/auth/.env (env: Some("dev"), ext: ["auth"])
-Found .env file: production/base/.env.production (env: Some("production"), ext: [])
-Scanned build directory, found 2 .env files
-✓ Preserved 2 .env files to backup location
-✓ Removed existing build directory
-✓ Created clean build directory
-
-Restoring preserved .env files to new build structure
-Generated 2 path mappings for .env restoration
-✓ Restored .env file to: build/development/auth/.env
-✓ Restored .env file to: build/production/base/.env.production
-Restoration completed: 2 restored, 0 fallback placements
-✓ Cleaned up temporary backup directory
-```
-
-### Security Considerations
-
-- **Backup Security**: Temporary backups are stored in `.stackbuilder_env_backup/` (automatically cleaned up)
-- **Production Files**: Critical production `.env` files are preserved even during major configuration changes
-- **File Permissions**: Original file permissions are maintained during restoration
-- **Conflict Resolution**: Existing files with same content are not overwritten; conflicts create backup copies
-
-### Limitations and Edge Cases
-
-- **Path Ambiguity**: When mapping confidence is low, files are placed in fallback locations with descriptive names
-- **Multiple Matches**: If multiple valid restoration paths exist, the highest confidence mapping is used
-- **Missing Structure**: If target structure doesn't exist, fallback paths are created automatically
-- **Large .env Files**: Very large .env files may impact build performance (no size limit enforced)
-
-### Best Practices
-
-1. **Consistent Naming**: Use consistent environment and extension naming for best mapping results
-2. **Review Fallbacks**: Check build logs for fallback placements and relocate files manually if needed
-3. **Backup Strategy**: Maintain external backups of critical `.env` files for additional safety
-4. **Test Rebuilds**: Test configuration changes on non-production environments first
-
-### Disabling Preservation
-
-For clean builds without .env preservation:
 
 ```toml
 [build]

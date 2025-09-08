@@ -1,2 +1,3 @@
 [build]
-environments = ["prod"]
+[build.environments]
+available = ["prod"]

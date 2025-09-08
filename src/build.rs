@@ -60,7 +60,7 @@ impl BuildExecutor {
             config.paths.extensions_dirs.clone(),
         );
 
-        let num_envs = config.build.environments.as_ref().map_or(0, |e| e.len());
+        let num_envs = config::get_environments_list(&config).len();
         let num_extensions = config.build.extensions.as_ref().map_or(0, |e| e.len());
         let num_combos = config.build.combos.len();
 
@@ -95,7 +95,10 @@ pub fn execute_build() -> Result<()> {
 
 /// Determine all build combinations based on configuration
 fn determine_build_combinations(config: &config::Config) -> Result<Vec<BuildCombination>> {
-    let combinations = if let Some(ref targets) = config.build.targets {
+    let combinations = if config::is_using_new_environments_api(config) {
+        // New API mode: use new environments structure
+        resolve_new_api_combinations(config)?
+    } else if let Some(ref targets) = config.build.targets {
         resolve_target_combinations(config, targets)?
     } else {
         // Legacy mode: use old logic for backwards compatibility
@@ -117,6 +120,26 @@ fn determine_build_combinations(config: &config::Config) -> Result<Vec<BuildComb
     Ok(combinations)
 }
 
+/// Resolve build combinations using new environments API
+fn resolve_new_api_combinations(config: &config::Config) -> Result<Vec<BuildCombination>> {
+    if let Some(ref env_config) = config.build.environments_config {
+        // Convert new API to legacy format for compatibility
+        let legacy_targets = config::BuildTargets {
+            environment_configs: env_config.environment_configs.iter()
+                .map(|(name, cfg)| (name.clone(), config::EnvironmentTarget {
+                    extensions: cfg.extensions.clone(),
+                    combos: cfg.combos.clone(),
+                    skip_base_generation: cfg.skip_base_generation,
+                }))
+                .collect(),
+        };
+        
+        resolve_legacy_combinations_with_targets(config, Some(&legacy_targets))
+    } else {
+        Ok(vec![])
+    }
+}
+
 /// Resolve build combinations from targets configuration (delegates to legacy with filtering)
 fn resolve_target_combinations(config: &config::Config, targets: &config::BuildTargets) -> Result<Vec<BuildCombination>> {
     // Use legacy logic with targets filtering
@@ -132,7 +155,7 @@ fn resolve_legacy_combinations(config: &config::Config) -> Result<Vec<BuildCombi
 fn resolve_legacy_combinations_with_targets(config: &config::Config, targets: Option<&config::BuildTargets>) -> Result<Vec<BuildCombination>> {
     let mut combinations = Vec::new();
 
-    let environments = config.build.environments.as_ref().map_or_else(Vec::new, |v| v.clone());
+    let environments = config::get_environments_list(config);
     
     // Get global extensions (applies to all environments if no per-env config)
     let global_extensions = config.build.extensions.as_ref().map_or_else(Vec::new, |v| v.clone());
@@ -145,6 +168,16 @@ fn resolve_legacy_combinations_with_targets(config: &config::Config, targets: Op
             let env_combo_names = env_target.combos.as_ref().map_or_else(Vec::new, |c| c.clone());
             let env_skip_base = env_target.skip_base_generation.unwrap_or(config.build.skip_base_generation);
             env_specific_configs.insert(env_name.clone(), (env_extensions, env_combo_names, env_skip_base));
+        }
+    } else {
+        // Try new API if no legacy targets
+        for env in &environments {
+            if let Some(env_cfg) = config::get_environment_config(config, env) {
+                let env_extensions = env_cfg.extensions.as_ref().map_or_else(Vec::new, |e| e.clone());
+                let env_combo_names = env_cfg.combos.as_ref().map_or_else(Vec::new, |c| c.clone());
+                let env_skip_base = env_cfg.skip_base_generation.unwrap_or(config.build.skip_base_generation);
+                env_specific_configs.insert(env.clone(), (env_extensions, env_combo_names, env_skip_base));
+            }
         }
     }
 

@@ -5,5 +5,4 @@ extensions_dirs = ["extensions"]
 build_dir = "./build"
 
 [build]
-environments = []
 extensions = ["monitoring"]

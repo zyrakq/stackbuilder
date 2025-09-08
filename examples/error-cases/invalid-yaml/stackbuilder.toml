@@ -1,9 +1,0 @@
-[paths]
-components_dir = "./components"
-base_dir = "base"
-environments_dir = "environments"
-extensions_dirs = ["extensions"]
-build_dir = "./build"
-
-[build]
-environments = ["dev"]

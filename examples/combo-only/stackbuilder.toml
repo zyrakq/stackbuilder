@@ -1,6 +1,12 @@
 [build]
-environments = ["prod"]
 skip_base_generation = true
 
 # Define combos only (no direct extensions)
 combos = { fullstack = ["frontend", "backend", "database"] }
+
+[build.environments]
+available = ["prod"]
+
+[build.environments.prod]
+combos = ["fullstack"]
+skip_base_generation = true

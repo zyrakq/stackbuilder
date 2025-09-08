@@ -6,5 +6,14 @@ extensions_dirs = ["extensions"]
 build_dir = "./build"
 
 [build]
-environments = ["development", "staging", "production"]
+[build.environments]
+available = ["development", "staging", "production"]
+
+[build.environments.development]
+extensions = ["monitoring", "logging", "auth", "backup"]
+
+[build.environments.staging]
+extensions = ["monitoring", "logging", "auth", "backup"]
+
+[build.environments.production]
 extensions = ["monitoring", "logging", "auth", "backup"]

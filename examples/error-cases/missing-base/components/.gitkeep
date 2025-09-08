@@ -1,2 +1,0 @@
-# This file ensures the components directory exists
-# but the base subdirectory is missing to trigger an error

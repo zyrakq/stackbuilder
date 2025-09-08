@@ -1,6 +1,14 @@
 [build]
-environments = ["dev", "prod"]
-extensions = ["logging"]
-
 # Define combos
 combos = { security = ["oidc", "guard"] }
+
+[build.environments]
+available = ["dev", "prod"]
+
+[build.environments.dev]
+extensions = ["logging"]
+combos = ["security"]
+
+[build.environments.prod]
+extensions = ["logging"]
+combos = ["security"]

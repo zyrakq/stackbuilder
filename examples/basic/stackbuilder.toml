@@ -6,5 +6,11 @@ extensions_dirs = ["extensions"]
 build_dir = "./build"
 
 [build]
-environments = ["devcontainer", "internal"]
+[build.environments]
+available = ["devcontainer", "internal"]
+
+[build.environments.devcontainer]
+extensions = ["oidc", "guard"]
+
+[build.environments.internal]
 extensions = ["oidc", "guard"]

@@ -95,7 +95,13 @@ your-project/
 
 ```toml
 [build]
-environments = ["dev", "prod"]
+[build.environments]
+available = ["dev", "prod"]
+
+[build.environments.dev]
+extensions = ["monitoring", "auth"]
+
+[build.environments.prod]
 extensions = ["monitoring", "auth"]
 ```
 
@@ -103,22 +109,26 @@ extensions = ["monitoring", "auth"]
 
 ```toml
 [build]
-environments = ["dev", "staging", "prod"]
 # Define reusable extension combinations
 combos = {
     security = ["auth", "guard"],
     observability = ["monitoring", "logging"]
 }
 
-# Use new targets configuration for selective filtering
-[build.targets.dev]
+# New environments API
+[build.environments]
+available = ["dev", "staging", "prod"]
+
+# Per-environment configurations
+[build.environments.dev]
 extensions = ["debugging"]
 combos = ["security"]
 
-[build.targets.prod]
+[build.environments.staging]
 combos = ["security", "observability"]
 
-# staging не указан в targets - получает все глобальные combos
+[build.environments.prod]
+combos = ["security", "observability"]
 ```
 
 ## 📁 Example Walkthrough
