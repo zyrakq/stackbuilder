@@ -6,6 +6,9 @@ extensions_dirs = ["extensions"]
 build_dir = "./build"
 
 [build]
+# Global environments list
+environments = ["dev", "staging", "prod"]
+
 # Define named combos as inline tables
 combos = { security = [
     "oidc",
@@ -19,11 +22,7 @@ combos = { security = [
     "profiling",
 ] }
 
-# Use new targets configuration
-[build.targets]
-environments = ["dev", "staging", "prod"]
-
-# Per-environment configuration using combos and extensions
+# Per-environment filtering via targets
 [build.targets.dev]
 extensions = ["logging"]
 combos = ["security", "development"]

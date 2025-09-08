@@ -6,6 +6,9 @@ services:
       - "80:80"
     environment:
       - APP_ENV=base
+      - APP_ENV=staging
+      - DEBUG=false
+      - LOG_LEVEL=info
     volumes:
       - ./html:/usr/share/nginx/html
   backup:

@@ -72,7 +72,6 @@ pub struct Build {
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct BuildTargets {
-    pub environments: Option<Vec<String>>,
     #[serde(flatten)]
     pub environment_configs: HashMap<String, EnvironmentTarget>,
 }
@@ -282,8 +281,8 @@ fn validate_combo_definitions(config: &Config) -> Result<()> {
 fn validate_build_targets(config: &Config, targets: &BuildTargets) -> Result<()> {
     let available_extensions = discover_extensions(config)?;
     
-    // Validate target environments exist (optional - environments may not have specific directories)
-    if let Some(ref envs) = targets.environments {
+    // Validate target environments from global config (targets no longer have environments field)
+    if let Some(ref envs) = config.build.environments {
         let envs_path = std::path::Path::new(&config.paths.components_dir)
             .join(&config.paths.environments_dir);
         
@@ -443,9 +442,4 @@ pub fn resolve_combo_extensions(config: &Config, combo_names: &[String]) -> Resu
     }
     
     Ok(resolved_extensions)
-}
-
-// Get combo names for an environment target
-pub fn get_target_combo_names(env_target: &EnvironmentTarget) -> Vec<String> {
-    env_target.combos.as_ref().map_or_else(Vec::new, |combos| combos.clone())
 }

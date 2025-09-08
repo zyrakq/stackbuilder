@@ -54,31 +54,106 @@ Benefits of named combos:
 
 #### Build Targets
 
-The new `targets` configuration provides more flexible environment and combo management:
+Build Targets предоставляет гибкую систему фильтрации extensions и combos для конкретных environments. Основное отличие от legacy режима:
+
+- **Legacy режим** (без `[build.targets]`): все environments получают все глобальные extensions и combos
+- **Targets режим** (с `[build.targets]`): каждый environment получает только то, что явно указано в его конфигурации + fallback для неуказанных environments
+
+The new `targets` configuration provides more flexible environment and combo management with selective filtering:
 
 ```toml
-[build.targets]
+[build]
 environments = ["dev", "staging", "prod"]
+extensions = ["logging", "backup"]       # Global extensions
+combos = {
+    security = ["oidc", "guard"],
+    monitoring = ["prometheus", "grafana"]
+}
 
-# Per-environment configuration
+# Per-environment filtering (optional)
 [build.targets.dev]
-extensions = ["logging"]          # Individual extensions
-combos = ["security", "development"]  # Named combos
+extensions = ["logging"]                 # Only apply logging extension
+combos = ["security"]                    # Only apply security combo
 
 [build.targets.staging]
-extensions = ["backup"]
-combos = ["monitoring"]
+extensions = ["backup"]                  # Only apply backup extension
+combos = ["monitoring"]                  # Only apply monitoring combo
 
-[build.targets.prod]
-combos = ["security", "monitoring"]  # Only combos, no individual extensions
+# prod environment не указан в targets - получает все глобальные extensions и combos
 ```
 
-Where:
+**Важное поведение targets логики:**
 
-- `environments` (array of strings, optional): List of environments to build
-- `[build.targets.{env}]` sections define per-environment configuration:
-  - `extensions` (array of strings, optional): Individual extensions for this environment
-  - `combos` (array of strings, optional): Named combos to apply to this environment
+- Global [`environments`](docs/config.md:23) list определяется в `[build]` секции
+- `[build.targets.{env}]` секции определяют **фильтрацию** для конкретных environments:
+  - [`extensions`](docs/config.md:24) (массив строк, опционально): Какие extensions применить к этому environment
+  - [`combos`](docs/config.md:25) (массив строк, опционально): Какие named combos применить к этому environment
+- **Fallback поведение**: Если environment включен в [`build.environments`](docs/config.md:23), но НЕ имеет конфигурации в `[build.targets.{env}]`, то к нему применяются **ВСЕ** глобальные extensions и combos
+
+В примере выше:
+
+- `dev` получит только `logging` extension и `security` combo
+- `staging` получит только `backup` extension и `monitoring` combo
+- `prod` получит **все** глобальные extensions (`logging`, `backup`) и **все** combos (`security`, `monitoring`)
+
+### Targets Filtering Logic
+
+Targets система работает как **селективный фильтр** поверх глобальной конфигурации:
+
+#### Режимы работы
+
+1. **Legacy режим (без `[build.targets]`)**:
+   - Все environments получают все глобальные `extensions` и `combos`
+   - Простое поведение "всё для всех"
+
+2. **Targets режим (с `[build.targets]`)**:
+   - Каждый environment получает только то, что явно указано в его `[build.targets.{env}]` секции
+   - Environment без targets конфигурации получает **ВСЕ** глобальные extensions и combos (fallback)
+
+#### Практические примеры
+
+##### Пример 1: Частичная фильтрация
+
+```toml
+[build]
+environments = ["dev", "prod"]
+extensions = ["logging", "monitoring", "backup"]
+combos = { security = ["oidc", "guard"] }
+
+[build.targets.dev]
+extensions = ["logging"]  # dev получает только logging
+# combos не указаны - dev НЕ получает security combo
+```
+
+**Результат:**
+
+- `dev`: только `logging` extension (без combos)
+- `prod`: **все** extensions (`logging`, `monitoring`, `backup`) + **все** combos (`security`)
+
+##### Пример 2: Только combos
+
+```toml
+[build]
+environments = ["staging", "prod"]
+extensions = ["logging", "backup"]
+combos = { full = ["frontend", "backend", "database"] }
+
+[build.targets.staging]
+combos = ["full"]  # staging получает только full combo
+# extensions не указаны - staging НЕ получает глобальные extensions
+```
+
+**Результат:**
+
+- `staging`: только `full` combo (без individual extensions)
+- `prod`: **все** extensions (`logging`, `backup`) + **все** combos (`full`)
+
+#### Важные правила
+
+- **Явное указание**: Если в `[build.targets.{env}]` указаны `extensions` - применяются только они
+- **Явное указание**: Если в `[build.targets.{env}]` указаны `combos` - применяются только они
+- **Полное отсутствие**: Если environment отсутствует в targets - применяется всё глобальное
+- **Пустые списки**: `extensions = []` означает "никаких extensions" (не fallback)
 
 ## Validation Rules
 
@@ -151,7 +226,6 @@ pub struct Build {
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct BuildTargets {
-    pub environments: Option<Vec<String>>,
     #[serde(flatten)]
     pub environment_configs: HashMap<String, EnvironmentTarget>,
 }
@@ -233,12 +307,10 @@ extensions = ["oidc", "guard", "monitoring"]
 # Define named combos
 combos = { security = ["oidc", "guard"] }
 
-# Use targets to apply combos
-[build.targets]
-environments = ["test"]
-
+# Use targets to filter specific combos per environment
 [build.targets.test]
-combos = ["security"]
+combos = ["security"]  # Only apply security combo to test environment
+# Результат: test получит только security combo, но все глобальные extensions
 ```
 
 ### Named Combos Configuration Example
@@ -252,6 +324,9 @@ extensions_dirs = ["extensions"]
 build_dir = "./build"
 
 [build]
+environments = ["dev", "staging", "prod"]  # Global environments list
+extensions = ["logging", "backup"]         # Global extensions
+
 # Define named combos
 combos = {
     security = ["oidc", "guard"],
@@ -259,21 +334,16 @@ combos = {
     development = ["debugging", "profiling"]
 }
 
-# Use new targets configuration
-[build.targets]
-environments = ["dev", "staging", "prod"]
-
-# Per-environment configuration using combos and extensions
+# Use targets for selective filtering
 [build.targets.dev]
-extensions = ["logging"]
-combos = ["security", "development"]
+extensions = ["logging"]                   # dev: только logging extension
+combos = ["security", "development"]       # dev: только security и development combos
 
 [build.targets.staging]
-extensions = ["backup"]
-combos = ["monitoring"]
+extensions = ["backup"]                    # staging: только backup extension
+combos = ["monitoring"]                    # staging: только monitoring combo
 
-[build.targets.prod]
-combos = ["security", "monitoring"]
+# prod не указан в targets - получает ВСЕ глобальные extensions и combos
 ```
 
 This configuration creates the following build structure:
@@ -282,18 +352,23 @@ This configuration creates the following build structure:
 build/
 ├── dev/
 │   ├── base/docker-compose.yml
-│   ├── logging/docker-compose.yml          # Individual extension
-│   ├── security/docker-compose.yml         # Named combo (oidc + guard)
-│   └── development/docker-compose.yml      # Named combo (debugging + profiling)
+│   ├── logging/docker-compose.yml          # Filtered: только logging extension
+│   ├── security/docker-compose.yml         # Filtered: только security combo (oidc + guard)
+│   └── development/docker-compose.yml      # Filtered: только development combo (debugging + profiling)
 ├── staging/
 │   ├── base/docker-compose.yml
-│   ├── backup/docker-compose.yml           # Individual extension
-│   └── monitoring/docker-compose.yml       # Named combo (prometheus + grafana + alertmanager)
+│   ├── backup/docker-compose.yml           # Filtered: только backup extension
+│   └── monitoring/docker-compose.yml       # Filtered: только monitoring combo (prometheus + grafana + alertmanager)
 └── prod/
     ├── base/docker-compose.yml
-    ├── security/docker-compose.yml         # Named combo (oidc + guard)
-    └── monitoring/docker-compose.yml       # Named combo (prometheus + grafana + alertmanager)
+    ├── logging/docker-compose.yml          # Fallback: все глобальные extensions
+    ├── backup/docker-compose.yml           # Fallback: все глобальные extensions
+    ├── security/docker-compose.yml         # Fallback: все глобальные combos (oidc + guard)
+    ├── monitoring/docker-compose.yml       # Fallback: все глобальные combos (prometheus + grafana + alertmanager)
+    └── development/docker-compose.yml      # Fallback: все глобальные combos (debugging + profiling)
 ```
+
+**Обратите внимание**: `prod` environment получает **все** доступные варианты, потому что не имеет специфической targets конфигурации.
 
 ### Legacy Configuration (Backwards Compatible)
 
@@ -419,6 +494,7 @@ extensions = ["oidc", "monitoring"]
 ```toml
 [build]
 copy_env_example = false
+```
 
 ## Additional Files Copying
 

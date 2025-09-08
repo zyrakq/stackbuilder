@@ -6,8 +6,15 @@ services:
       - "80:80"
     environment:
       - APP_ENV=base
+      - APP_ENV=production
+      - DEBUG=false
+      - LOG_LEVEL=warn
     volumes:
       - ./html:/usr/share/nginx/html
+    deploy:
+      replicas: 3
+      restart_policy:
+        condition: on-failure
   oidc:
     image: quay.io/oauth2-proxy/oauth2-proxy:latest
     ports:

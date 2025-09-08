@@ -6,6 +6,9 @@ services:
       - "80:80"
     environment:
       - APP_ENV=base
+      - APP_ENV=development
+      - DEBUG=true
+      - LOG_LEVEL=debug
     volumes:
       - ./html:/usr/share/nginx/html
   elasticsearch:

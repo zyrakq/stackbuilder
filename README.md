@@ -103,22 +103,22 @@ extensions = ["monitoring", "auth"]
 
 ```toml
 [build]
+environments = ["dev", "staging", "prod"]
 # Define reusable extension combinations
 combos = {
     security = ["auth", "guard"],
     observability = ["monitoring", "logging"]
 }
 
-# Use new targets configuration
-[build.targets]
-environments = ["dev", "staging", "prod"]
-
+# Use new targets configuration for selective filtering
 [build.targets.dev]
 extensions = ["debugging"]
 combos = ["security"]
 
 [build.targets.prod]
 combos = ["security", "observability"]
+
+# staging не указан в targets - получает все глобальные combos
 ```
 
 ## 📁 Example Walkthrough
