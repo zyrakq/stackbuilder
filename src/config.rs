@@ -213,20 +213,23 @@ pub fn validate_config(config: &Config) -> Result<()> {
     // Validate combo definitions
     validate_combo_definitions(config)?;
 
-    // Check environments_dir if specified and not empty
+    // Check environments_dir if specified and not empty (optional - environments can exist without specific folders)
     if let Some(ref envs) = config.build.environments {
         if !envs.is_empty() {
             let envs_path = components_path.join(&config.paths.environments_dir);
-            if !envs_path.exists() {
-                return Err(ValidationError::DirectoryNotFound {
-                    path: envs_path,
-                }.into());
-            }
-            for env in envs {
-                let env_path = envs_path.join(env);
-                if !env_path.exists() {
-                    return Err(ValidationError::environment_not_found(env, envs_path.clone()).into());
+            // Environments directory is optional - it may not exist if environments are just logical names
+            if envs_path.exists() {
+                for env in envs {
+                    let env_path = envs_path.join(env);
+                    // Individual environment directories are also optional
+                    if env_path.exists() {
+                        println!("✓ Found environment directory: {}", env);
+                    } else {
+                        println!("ℹ Environment '{}' has no specific directory (using base only)", env);
+                    }
                 }
+            } else {
+                println!("ℹ No environments directory found - environments will use base configuration only");
             }
         }
     }
@@ -283,16 +286,23 @@ fn validate_combo_definitions(config: &Config) -> Result<()> {
 fn validate_build_targets(config: &Config, targets: &BuildTargets) -> Result<()> {
     let available_extensions = discover_extensions(config)?;
     
-    // Validate target environments exist
+    // Validate target environments exist (optional - environments may not have specific directories)
     if let Some(ref envs) = targets.environments {
         let envs_path = std::path::Path::new(&config.paths.components_dir)
             .join(&config.paths.environments_dir);
         
-        for env in envs {
-            let env_path = envs_path.join(env);
-            if !env_path.exists() {
-                return Err(ValidationError::environment_not_found(env, envs_path.clone()).into());
+        // Environments directory and individual environment folders are optional
+        if envs_path.exists() {
+            for env in envs {
+                let env_path = envs_path.join(env);
+                if env_path.exists() {
+                    println!("✓ Found target environment directory: {}", env);
+                } else {
+                    println!("ℹ Target environment '{}' has no specific directory (using base only)", env);
+                }
             }
+        } else {
+            println!("ℹ No environments directory found for targets - environments will use base configuration only");
         }
     }
     
@@ -346,14 +356,20 @@ pub fn resolve_paths(config: &mut Config) -> Result<()> {
         })?;
     config.paths.base_dir = base_path.to_string_lossy().to_string();
 
-    // Only resolve environments_dir if environments are specified in build.targets
+    // Only resolve environments_dir if environments are specified and directory exists
     if config.build.environments.as_ref().is_some_and(|e| !e.is_empty()) {
-        let env_path = components_path.join(&config.paths.environments_dir).canonicalize()
-            .map_err(|e| ValidationError::PathResolutionError {
-                path: config.paths.environments_dir.clone(),
-                details: e.to_string(),
-            })?;
-        config.paths.environments_dir = env_path.to_string_lossy().to_string();
+        let env_path = components_path.join(&config.paths.environments_dir);
+        if env_path.exists() {
+            let resolved_env_path = env_path.canonicalize()
+                .map_err(|e| ValidationError::PathResolutionError {
+                    path: config.paths.environments_dir.clone(),
+                    details: e.to_string(),
+                })?;
+            config.paths.environments_dir = resolved_env_path.to_string_lossy().to_string();
+        } else {
+            // Keep relative path if directory doesn't exist - it's optional
+            config.paths.environments_dir = env_path.to_string_lossy().to_string();
+        }
     }
 
     // Only resolve extensions_dirs if extensions are specified in build.targets

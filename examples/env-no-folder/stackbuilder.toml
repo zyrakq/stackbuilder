@@ -1,0 +1,4 @@
+[paths]
+
+[build]
+environments = ["prod"]
