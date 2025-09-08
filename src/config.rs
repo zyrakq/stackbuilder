@@ -64,6 +64,8 @@ pub struct Build {
     pub preserve_env_files: bool,
     #[serde(default = "default_env_file_patterns")]
     pub env_file_patterns: Vec<String>,
+    #[serde(default = "default_skip_base_generation")]
+    pub skip_base_generation: bool,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -92,6 +94,7 @@ impl Default for Build {
             exclude_patterns: default_exclude_patterns(),
             preserve_env_files: default_preserve_env_files(),
             env_file_patterns: default_env_file_patterns(),
+            skip_base_generation: default_skip_base_generation(),
         }
     }
 }
@@ -153,6 +156,10 @@ fn default_env_file_patterns() -> Vec<String> {
         ".env.local".to_string(),
         ".env.production".to_string(),
     ]
+}
+
+fn default_skip_base_generation() -> bool {
+    false
 }
 
 // Load and parse stackbuilder.toml configuration file

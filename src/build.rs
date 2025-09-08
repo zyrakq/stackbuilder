@@ -157,8 +157,8 @@ fn resolve_target_combinations(config: &config::Config, targets: &config::BuildT
             }
         }
         
-        // Add base-only combination if no other combinations
-        if combinations.is_empty() {
+        // Add base-only combination if no other combinations AND we have multiple environments
+        if combinations.is_empty() && environments.len() >= 2 {
             combinations.push(BuildCombination {
                 environment: None,
                 extensions: vec![],
@@ -243,29 +243,44 @@ fn resolve_legacy_combinations(config: &config::Config) -> Result<Vec<BuildCombi
             }.into());
         }
         (1, _) if !extensions.is_empty() => {
-            // 1 environment with extensions: create base, and extension folders
+            // 1 environment with extensions
             let env = &environments[0];
 
-            // Base for environment
-            combinations.push(BuildCombination {
-                environment: Some(env.clone()),
-                extensions: vec![],
-                combo_names: vec![],
-                output_dir: env.clone(),
-            });
+            // Check if we should create subfolders
+            let should_create_subfolders = extensions.len() > 1 || !config.build.skip_base_generation;
 
-            // Extensions for environment
-            for ext_combo in &all_extension_combos {
-                if !ext_combo.is_empty() {
-                    let combo_str = ext_combo.join("+");
-                    let output_dir = format!("{}/{}", env, combo_str);
+            if should_create_subfolders {
+                // Create base and extension subfolders
+                if !config.build.skip_base_generation {
                     combinations.push(BuildCombination {
                         environment: Some(env.clone()),
-                        extensions: ext_combo.clone(),
+                        extensions: vec![],
                         combo_names: vec![],
-                        output_dir,
+                        output_dir: format!("{}/base", env),
                     });
                 }
+
+                // Extensions for environment
+                for ext_combo in &all_extension_combos {
+                    if !ext_combo.is_empty() {
+                        let combo_str = ext_combo.join("+");
+                        let output_dir = format!("{}/{}", env, combo_str);
+                        combinations.push(BuildCombination {
+                            environment: Some(env.clone()),
+                            extensions: ext_combo.clone(),
+                            combo_names: vec![],
+                            output_dir,
+                        });
+                    }
+                }
+            } else {
+                // Single extension, no subfolders - put directly in env folder
+                combinations.push(BuildCombination {
+                    environment: Some(env.clone()),
+                    extensions: extensions.clone(),
+                    combo_names: vec![],
+                    output_dir: env.clone(),
+                });
             }
         }
         (_, 0) if num_envs >= 1 => {
@@ -282,36 +297,52 @@ fn resolve_legacy_combinations(config: &config::Config) -> Result<Vec<BuildCombi
         (_, _) if !extensions.is_empty() => {
             // Environments with extensions
             if num_envs == 1 {
-                // Same as above case
+                // Same logic as above single environment case
                 let env = &environments[0];
-                combinations.push(BuildCombination {
-                    environment: Some(env.clone()),
-                    extensions: vec![],
-                    combo_names: vec![],
-                    output_dir: env.clone(),
-                });
-                for ext_combo in &all_extension_combos {
-                    if !ext_combo.is_empty() {
-                        let combo_str = ext_combo.join("+");
-                        let output_dir = format!("{}/{}", env, combo_str);
+                let should_create_subfolders = extensions.len() > 1 || !config.build.skip_base_generation;
+
+                if should_create_subfolders {
+                    if !config.build.skip_base_generation {
                         combinations.push(BuildCombination {
                             environment: Some(env.clone()),
-                            extensions: ext_combo.clone(),
+                            extensions: vec![],
                             combo_names: vec![],
-                            output_dir,
+                            output_dir: format!("{}/base", env),
                         });
                     }
-                }
-            } else {
-                // 2+ environments with extensions: create env folders, each with base and extensions
-                for env in &environments {
-                    // Environment base
+                    for ext_combo in &all_extension_combos {
+                        if !ext_combo.is_empty() {
+                            let combo_str = ext_combo.join("+");
+                            let output_dir = format!("{}/{}", env, combo_str);
+                            combinations.push(BuildCombination {
+                                environment: Some(env.clone()),
+                                extensions: ext_combo.clone(),
+                                combo_names: vec![],
+                                output_dir,
+                            });
+                        }
+                    }
+                } else {
+                    // Single extension, no subfolders
                     combinations.push(BuildCombination {
                         environment: Some(env.clone()),
-                        extensions: vec![],
+                        extensions: extensions.clone(),
                         combo_names: vec![],
-                        output_dir: format!("{}/base", env),
+                        output_dir: env.clone(),
                     });
+                }
+            } else {
+                // 2+ environments with extensions: always create env folders with subfolders
+                for env in &environments {
+                    // Environment base (only if not skipped)
+                    if !config.build.skip_base_generation {
+                        combinations.push(BuildCombination {
+                            environment: Some(env.clone()),
+                            extensions: vec![],
+                            combo_names: vec![],
+                            output_dir: format!("{}/base", env),
+                        });
+                    }
 
                     // Environment with extensions
                     for ext_combo in &all_extension_combos {
@@ -333,24 +364,25 @@ fn resolve_legacy_combinations(config: &config::Config) -> Result<Vec<BuildCombi
     }
 
     // Add extension-only combinations only if environments = 0
-    // OR if environments = 1 AND there are extensions > 0
-    if num_envs == 0 || (num_envs == 1 && !extensions.is_empty()) {
+    if num_envs == 0 {
+        // For 0 environments case: no subfolders if single extension, subfolders if multiple extensions
+        let should_create_subfolders = extensions.len() > 1;
+        
         for ext_combo in &all_extension_combos {
             if !ext_combo.is_empty() {
                 let combo_str = ext_combo.join("+");
+                let output_dir = if should_create_subfolders {
+                    combo_str
+                } else {
+                    // Single extension with 0 environments - put directly in build root
+                    "".to_string()
+                };
+                
                 combinations.push(BuildCombination {
                     environment: None,
                     extensions: ext_combo.clone(),
                     combo_names: vec![],
-                    output_dir: combo_str,
-                });
-            } else if num_envs == 0 {
-                // Base only - but only add this if no environments at all
-                combinations.push(BuildCombination {
-                    environment: None,
-                    extensions: vec![],
-                    combo_names: vec![],
-                    output_dir: "base".to_string(),
+                    output_dir,
                 });
             }
         }
@@ -409,8 +441,10 @@ fn create_build_structure(executor: &BuildExecutor, combinations: &[BuildCombina
     for combo in combinations {
         println!("Processing combination: {:?}", combo.output_dir);
 
-        // Special case for 1 env 0 ext: put file directly in build directory without subfolders
-        let (output_path, file_name) = if executor.num_envs == 1 && executor.num_extensions == 0 {
+        // Special cases for putting file directly in build directory without subfolders:
+        // 1. 1 env + 0 ext
+        // 2. 0 env + 1 ext (when output_dir is empty)
+        let (output_path, file_name) = if (executor.num_envs == 1 && executor.num_extensions == 0) || combo.output_dir.is_empty() {
             (build_dir.to_path_buf(), "docker-compose.yml".to_string())
         } else {
             let path = build_dir.join(&combo.output_dir);
