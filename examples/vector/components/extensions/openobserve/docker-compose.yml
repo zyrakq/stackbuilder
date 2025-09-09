@@ -1,0 +1,25 @@
+services:
+  vector:
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    configs:
+      - source: openobserve
+        target: ${VECTOR_CONFIG_DIR:-/etc/vector/configs}/${VECTOR_OPENOBSERVE_NAME:-openobserve}.toml
+
+configs:
+  openobserve:
+    content: |
+      [sinks.${VECTOR_OPENOBSERVE_NAME:-openobserve}]
+      type = "${VECTOR_OPENOBSERVE_TYPE:-http}"
+      inputs = ${VECTOR_OPENOBSERVE_INPUTS}
+      uri = "${VECTOR_OPENOBSERVE_URL}"
+      method = "${VECTOR_OPENOBSERVE_METHOD:-post}"
+      auth.strategy = "${VECTOR_OPENOBSERVE_AUTH_STRATEGY:-basic}"
+      auth.user = "${VECTOR_OPENOBSERVE_AUTH_USER}"
+      auth.password = "${VECTOR_OPENOBSERVE_AUTH_PASSWORD}"
+      compression = "${VECTOR_OPENOBSERVE_COMPRESSION:-gzip}"
+      encoding.codec = "${VECTOR_OPENOBSERVE_ENCODING_CODEC:-json}"
+      encoding.timestamp_format = "${VECTOR_OPENOBSERVE_ENCODING_TIMESTAMP_FORMAT:-rfc3339}"
+      healthcheck.enabled = ${VECTOR_OPENOBSERVE_HEALTHCHECK_ENABLED:-false}
+
+

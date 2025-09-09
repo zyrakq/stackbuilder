@@ -1,0 +1,33 @@
+services:
+  vector:
+    configs:
+      - source: uvicorn
+        target: ${VECTOR_CONFIG_DIR:-/etc/vector/configs}/${VECTOR_UVICORN_NAME:-uvicorn}.toml
+
+configs:
+  uvicorn:
+    content: |
+      [transforms.${VECTOR_UVICORN_NAME:-uvicorn}]
+      type = "remap"
+      inputs = ${VECTOR_UVICORN_INPUTS}
+      source = '''
+      parsed, err = parse_regex(.message, r'^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) \| (?P<level>\w+)\s+\| (?P<logger>[\w\.:]+) - (?P<client_ip>[\d\.]+):(?P<client_port>\d+) - "(?P<method>\w+) (?P<path>[^"]+) (?P<protocol>[^"]+)" (?P<status_code>\d+)$')
+
+      if err != null {
+        log("Failed to parse uvicorn log: " + err, level: "warn")
+        .parse_error = true
+      } else {
+        .timestamp = parse_timestamp!(parsed.timestamp, format: "%Y-%m-%d %H:%M:%S%.3f")
+        .level = parsed.level
+        .logger = parsed.logger
+        .client_ip = parsed.client_ip
+        .client_port = to_int!(parsed.client_port)
+        .http_method = parsed.method
+        .http_path = parsed.path
+        .http_protocol = parsed.protocol
+        .http_status_code = to_int!(parsed.status_code)
+        .parse_error = false
+      }
+      '''
+
+

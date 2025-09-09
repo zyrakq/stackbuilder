@@ -27,6 +27,7 @@ Defines the build rules and configurations.
 - `exclude_patterns` (array of strings, default: `["docker-compose.yml", ".env.example", "*.tmp", ".git*", "node_modules", "*.log"]`): Glob patterns for files to exclude from additional file copying
 - `preserve_env_files` (boolean, default: `true`): Enable intelligent preservation of existing .env files during build directory cleanup
 - `env_file_patterns` (array of strings, default: `[".env", ".env.local", ".env.production"]`): Patterns for .env files to preserve during smart cleanup
+- `backup_dir` (string, default: `"./.stackbuilder/backup"`): Directory path for storing .env file backups during build directory cleanup
 - `skip_base_generation` (boolean, default: `false`): Skip generation of base configuration variants, useful for extension-only or combo-only scenarios
 
 #### Named Combos
@@ -295,6 +296,8 @@ pub struct Build {
     pub preserve_env_files: bool,
     #[serde(default = "default_env_file_patterns")]
     pub env_file_patterns: Vec<String>,
+    #[serde(default = "default_backup_dir")]
+    pub backup_dir: String,
     #[serde(default = "default_skip_base_generation")]
     pub skip_base_generation: bool,
 }
@@ -378,14 +381,43 @@ Place additional files alongside `docker-compose.yml` files in component directo
 
 Stackbuilder includes an intelligent build directory cleanup system that preserves existing `.env` files during rebuilds when the `preserve_env_files` option is enabled (default: `true`).
 
+### How It Works
+
+1. **Backup Phase**: Before cleaning the build directory, all `.env` files matching `env_file_patterns` are backed up to `backup_dir`
+2. **Restoration Phase**: After creating the new build structure, files are restored only to their exact original locations
+3. **Centralized Backup**: Files that cannot be restored (due to changed structure) remain in the backup directory for manual recovery
+
+### Backup Directory Structure
+
+The backup directory uses timestamped folders to preserve multiple backup versions:
+
+```sh
+.stackbuilder/backup/
+└── backup_1694268450/
+    ├── metadata.json
+    ├── devcontainer_base_.env
+    ├── dev_auth_.env.local
+    └── prod_monitoring_.env.production
+```
+
 ### Configuration Options
 
-#### Enable .env preservation (default)
+#### Enable .env preservation with custom backup location
 
 ```toml
 [build]
 preserve_env_files = true
 env_file_patterns = [".env", ".env.local", ".env.production"]
+backup_dir = "./my-custom-backup"
+```
+
+#### Default .env preservation
+
+```toml
+[build]
+preserve_env_files = true
+env_file_patterns = [".env", ".env.local", ".env.production"]
+backup_dir = "./.stackbuilder/backup"  # default
 ```
 
 #### Disable .env preservation
@@ -396,3 +428,10 @@ preserve_env_files = false
 ```
 
 This performs standard cleanup (complete removal) without .env file scanning or restoration.
+
+### Important Notes
+
+- Files are **only restored to their exact original locations** - no fallback files are created in build directories
+- If the build structure changes and original locations no longer exist, files remain safely in the backup directory
+- Backup directories are **not automatically deleted** - they serve as a safety net for manual recovery
+- In case of content conflicts, existing files take priority and preserved files remain in backup

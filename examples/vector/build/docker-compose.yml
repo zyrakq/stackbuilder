@@ -1,0 +1,65 @@
+services:
+  vector:
+    container_name: vector
+    image: timberio/vector:0.49.0-alpine
+    restart: unless-stopped
+    environment:
+      VECTOR_CONFIG_DIR: ${VECTOR_CONFIG_DIR:-/etc/vector/configs}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: 10m
+        max-file: 3
+    configs:
+      - source: docker-logs
+        target: ${VECTOR_CONFIG_DIR:-/etc/vector/configs}/${VECTOR_DOCKER_LOGS_NAME:-docker}.toml
+      - source: uvicorn
+        target: ${VECTOR_CONFIG_DIR:-/etc/vector/configs}/${VECTOR_UVICORN_NAME:-uvicorn}.toml
+      - source: openobserve
+        target: ${VECTOR_CONFIG_DIR:-/etc/vector/configs}/${VECTOR_OPENOBSERVE_NAME:-openobserve}.toml
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+configs:
+  docker-logs:
+    content: |
+      [sources.${VECTOR_DOCKER_LOGS_NAME:-docker}]
+      type = "docker_logs"
+      include_containers = ${VECTOR_DOCKER_LOGS_INCLUDE_CONTAINERS}
+  uvicorn:
+    content: |
+      [transforms.${VECTOR_UVICORN_NAME:-uvicorn}]
+      type = "remap"
+      inputs = ${VECTOR_UVICORN_INPUTS}
+      source = '''
+      parsed, err = parse_regex(.message, r'^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) \| (?P<level>\w+)\s+\| (?P<logger>[\w\.:]+) - (?P<client_ip>[\d\.]+):(?P<client_port>\d+) - "(?P<method>\w+) (?P<path>[^"]+) (?P<protocol>[^"]+)" (?P<status_code>\d+)$')
+
+      if err != null {
+        log("Failed to parse uvicorn log: " + err, level: "warn")
+        .parse_error = true
+      } else {
+        .timestamp = parse_timestamp!(parsed.timestamp, format: "%Y-%m-%d %H:%M:%S%.3f")
+        .level = parsed.level
+        .logger = parsed.logger
+        .client_ip = parsed.client_ip
+        .client_port = to_int!(parsed.client_port)
+        .http_method = parsed.method
+        .http_path = parsed.path
+        .http_protocol = parsed.protocol
+        .http_status_code = to_int!(parsed.status_code)
+        .parse_error = false
+      }
+      '''
+  openobserve:
+    content: |
+      [sinks.${VECTOR_OPENOBSERVE_NAME:-openobserve}]
+      type = "${VECTOR_OPENOBSERVE_TYPE:-http}"
+      inputs = ${VECTOR_OPENOBSERVE_INPUTS}
+      uri = "${VECTOR_OPENOBSERVE_URL}"
+      method = "${VECTOR_OPENOBSERVE_METHOD:-post}"
+      auth.strategy = "${VECTOR_OPENOBSERVE_AUTH_STRATEGY:-basic}"
+      auth.user = "${VECTOR_OPENOBSERVE_AUTH_USER}"
+      auth.password = "${VECTOR_OPENOBSERVE_AUTH_PASSWORD}"
+      compression = "${VECTOR_OPENOBSERVE_COMPRESSION:-gzip}"
+      encoding.codec = "${VECTOR_OPENOBSERVE_ENCODING_CODEC:-json}"
+      encoding.timestamp_format = "${VECTOR_OPENOBSERVE_ENCODING_TIMESTAMP_FORMAT:-rfc3339}"
+      healthcheck.enabled = ${VECTOR_OPENOBSERVE_HEALTHCHECK_ENABLED:-false}

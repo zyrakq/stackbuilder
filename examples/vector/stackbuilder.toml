@@ -1,0 +1,11 @@
+[build]
+skip_base_generation = true
+
+[build.combos]
+open-webui = ["docker-logs", "uvicorn", "openobserve"]
+
+[build.environments]
+available = ["prod"]
+
+[build.environments.prod]
+combos = ["open-webui"]

@@ -36,6 +36,7 @@ pub struct BuildConfig {
     pub exclude_patterns: Vec<String>,
     pub preserve_env_files: bool,
     pub env_file_patterns: Vec<String>,
+    pub backup_dir: String,
     pub skip_base_generation: bool,
 }
 
@@ -70,6 +71,7 @@ impl<'de> Deserialize<'de> for BuildConfig {
                 let mut exclude_patterns: Option<Vec<String>> = None;
                 let mut preserve_env_files: Option<bool> = None;
                 let mut env_file_patterns: Option<Vec<String>> = None;
+                let mut backup_dir: Option<String> = None;
                 let mut skip_base_generation: Option<bool> = None;
 
                 while let Some(key) = map.next_key::<String>().map_err(serde::de::Error::custom)? {
@@ -103,6 +105,9 @@ impl<'de> Deserialize<'de> for BuildConfig {
                         }
                         "env_file_patterns" => {
                             env_file_patterns = Some(map.next_value().map_err(serde::de::Error::custom)?);
+                        }
+                        "backup_dir" => {
+                            backup_dir = Some(map.next_value().map_err(serde::de::Error::custom)?);
                         }
                         "skip_base_generation" => {
                             skip_base_generation = Some(map.next_value().map_err(serde::de::Error::custom)?);
@@ -145,6 +150,7 @@ impl<'de> Deserialize<'de> for BuildConfig {
                     exclude_patterns: exclude_patterns.unwrap_or_else(default_exclude_patterns),
                     preserve_env_files: preserve_env_files.unwrap_or_else(default_preserve_env_files),
                     env_file_patterns: env_file_patterns.unwrap_or_else(default_env_file_patterns),
+                    backup_dir: backup_dir.unwrap_or_else(default_backup_dir),
                     skip_base_generation: skip_base_generation.unwrap_or_else(default_skip_base_generation),
                 })
             }
@@ -168,6 +174,7 @@ impl Default for BuildConfig {
             exclude_patterns: default_exclude_patterns(),
             preserve_env_files: default_preserve_env_files(),
             env_file_patterns: default_env_file_patterns(),
+            backup_dir: default_backup_dir(),
             skip_base_generation: default_skip_base_generation(),
         }
     }
@@ -222,6 +229,8 @@ pub struct Build {
     pub preserve_env_files: bool,
     #[serde(default = "default_env_file_patterns")]
     pub env_file_patterns: Vec<String>,
+    #[serde(default = "default_backup_dir")]
+    pub backup_dir: String,
     #[serde(default = "default_skip_base_generation")]
     pub skip_base_generation: bool,
 }
@@ -269,6 +278,7 @@ impl Default for Build {
             exclude_patterns: default_exclude_patterns(),
             preserve_env_files: default_preserve_env_files(),
             env_file_patterns: default_env_file_patterns(),
+            backup_dir: default_backup_dir(),
             skip_base_generation: default_skip_base_generation(),
         }
     }
@@ -325,6 +335,10 @@ fn default_env_file_patterns() -> Vec<String> {
         ".env.local".to_string(),
         ".env.production".to_string(),
     ]
+}
+
+fn default_backup_dir() -> String {
+    "./.stackbuilder/backup".to_string()
 }
 
 fn default_skip_base_generation() -> bool {

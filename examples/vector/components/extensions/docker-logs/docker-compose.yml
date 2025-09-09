@@ -1,0 +1,14 @@
+services:
+  vector:
+    configs:
+      - source: docker-logs
+        target: ${VECTOR_CONFIG_DIR:-/etc/vector/configs}/${VECTOR_DOCKER_LOGS_NAME:-docker}.toml
+
+configs:
+  docker-logs:
+    content: |
+      [sources.${VECTOR_DOCKER_LOGS_NAME:-docker}]
+      type = "docker_logs"
+      include_containers = ${VECTOR_DOCKER_LOGS_INCLUDE_CONTAINERS}
+
+

@@ -466,6 +466,7 @@ fn create_build_structure(executor: &BuildExecutor, combinations: &[BuildCombina
         build_dir,
         executor.config.build.preserve_env_files,
         executor.config.build.env_file_patterns.clone(),
+        executor.config.build.backup_dir.clone(),
     );
 
     cleaner.clean_build_directory()
