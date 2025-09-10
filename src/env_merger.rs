@@ -24,17 +24,88 @@ impl EnvMerger {
 /// Structure representing concatenated .env file content
 #[derive(Debug, Clone)]
 pub struct EnvFile {
-    pub variables: Vec<(String, String)>, // Store lines as key-value pairs
-    pub header_comments: Vec<String>,    // General file comments
+    pub variables: Vec<(String, String)>, // Use Vec to preserve order
+    pub variable_comments: BTreeMap<String, Vec<String>>, // Comments for each variable
+    pub header_comments: Vec<String>, // General file comments
+    pub variable_order: Vec<String>, // Track order of variable names
 }
 
 impl EnvFile {
     pub fn new() -> Self {
         Self {
             variables: Vec::new(),
+            variable_comments: BTreeMap::new(),
             header_comments: Vec::new(),
+            variable_order: Vec::new(),
         }
     }
+}
+
+/// Parse .env.example file and extract variables and comments
+pub fn parse_env_file(file_path: &str) -> Result<EnvFile> {
+    let content = fs::read_to_string(file_path)
+        .map_err(|e| FileSystemError::FileReadFailed {
+            path: file_path.into(),
+            source: e,
+        })?;
+
+    let mut env_file = EnvFile::new();
+    let mut comment_group_accumulator = Vec::new();
+    
+    for line in content.lines() {
+        let trimmed = line.trim();
+        
+        // Handle comments
+        if trimmed.starts_with('#') {
+            if !comment_group_accumulator.is_empty() {
+                comment_group_accumulator.push("".to_string()); // Separator between comment groups
+            }
+            comment_group_accumulator.push(trimmed.to_string());
+            continue;
+        }
+        
+        // Handle empty lines - preserve as comment separators
+        if trimmed.is_empty() {
+            if !comment_group_accumulator.is_empty() {
+                comment_group_accumulator.push("".to_string());
+            }
+            continue;
+        }
+        
+        // Parse variable assignment
+        if let Some(eq_pos) = trimmed.find('=') {
+            let key = trimmed[..eq_pos].trim().to_string();
+            let value = trimmed[eq_pos + 1..].trim().to_string();
+            
+            // Remove quotes if present
+            let value = if (value.starts_with('"') && value.ends_with('"')) ||
+                          (value.starts_with('\'') && value.ends_with('\'')) {
+                value[1..value.len()-1].to_string()
+            } else {
+                value
+            };
+            
+            // Associate accumulated comments with this variable
+            if !comment_group_accumulator.is_empty() {
+                env_file.variable_comments.insert(key.clone(), comment_group_accumulator.clone());
+                comment_group_accumulator.clear();
+            }
+            
+            // Store variable in order and track its name
+            env_file.variables.push((key.clone(), value));
+            env_file.variable_order.push(key);
+        }
+    }
+    
+    // Remaining comments are header comments
+    if !comment_group_accumulator.is_empty() {
+        env_file.header_comments.extend(comment_group_accumulator);
+    }
+
+    println!("Parsed .env file: {} with {} variables and {} comment groups",
+             file_path, env_file.variables.len(), env_file.variable_comments.len());
+    
+    Ok(env_file)
 }
 
 /// Concatenate .env.example files in specified order: base -> environment -> extensions
@@ -90,8 +161,9 @@ pub fn merge_env_files(
     }
 
     // Store the entire concatenated content as single lines
-    for (i, line) in all_content.lines().enumerate() {
-        env_file.variables.push((format!("line_{}", i), line.to_string()));
+    for line in all_content.lines() {
+        env_file.variables.push((format!("line_{}", env_file.variables.len()), line.to_string()));
+        env_file.variable_order.push(format!("line_{}", env_file.variable_order.len()));
     }
 
     println!("Successfully concatenated {} .env.example files with {} total lines",
