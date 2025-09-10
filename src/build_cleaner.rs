@@ -300,11 +300,10 @@ impl BuildCleaner {
         fs::write(&metadata_path, metadata_json)
             .with_context(|| format!("Failed to write metadata file: {}", metadata_path.display()))?;
 
-        // Save files with full path as filename (replacing / with _)
+        // Save files with full path as filename (replacing / and \ with _)
         for file in files.iter() {
             let safe_filename = file.original_path.to_string_lossy()
-                .replace('/', "_")
-                .replace('\\', "_");
+                .replace(['/', '\\'], "_");
             let backup_file_path = backup_path.join(&safe_filename);
             
             fs::write(&backup_file_path, &file.content)
