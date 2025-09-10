@@ -25,17 +25,19 @@ impl EnvMerger {
 /// Structure representing a parsed .env file with variables and comments
 #[derive(Debug, Clone)]
 pub struct EnvFile {
-    pub variables: BTreeMap<String, String>,
+    pub variables: Vec<(String, String)>, // Use Vec to preserve order
     pub variable_comments: BTreeMap<String, Vec<String>>, // Comments for each variable
     pub header_comments: Vec<String>, // General file comments
+    pub variable_order: Vec<String>, // Track order of variable names
 }
 
 impl EnvFile {
     pub fn new() -> Self {
         Self {
-            variables: BTreeMap::new(),
+            variables: Vec::new(),
             variable_comments: BTreeMap::new(),
             header_comments: Vec::new(),
+            variable_order: Vec::new(),
         }
     }
 }
@@ -49,19 +51,25 @@ pub fn parse_env_file(file_path: &str) -> Result<EnvFile> {
         })?;
 
     let mut env_file = EnvFile::new();
-    let mut current_comments = Vec::new();
+    let mut comment_group_accumulator = Vec::new();
     
     for line in content.lines() {
         let trimmed = line.trim();
         
-        // Skip empty lines
-        if trimmed.is_empty() {
+        // Handle comments
+        if trimmed.starts_with('#') {
+            if !comment_group_accumulator.is_empty() {
+                comment_group_accumulator.push("".to_string()); // Separator between comment groups
+            }
+            comment_group_accumulator.push(trimmed.to_string());
             continue;
         }
         
-        // Handle comments
-        if trimmed.starts_with('#') {
-            current_comments.push(trimmed.to_string());
+        // Handle empty lines - preserve as comment separators
+        if trimmed.is_empty() {
+            if !comment_group_accumulator.is_empty() {
+                comment_group_accumulator.push("".to_string());
+            }
             continue;
         }
         
@@ -78,19 +86,21 @@ pub fn parse_env_file(file_path: &str) -> Result<EnvFile> {
                 value
             };
             
-            // Associate comments with this variable
-            if !current_comments.is_empty() {
-                env_file.variable_comments.insert(key.clone(), current_comments.clone());
-                current_comments.clear();
+            // Associate accumulated comments with this variable
+            if !comment_group_accumulator.is_empty() {
+                env_file.variable_comments.insert(key.clone(), comment_group_accumulator.clone());
+                comment_group_accumulator.clear();
             }
             
-            env_file.variables.insert(key, value);
+            // Store variable in order and track its name
+            env_file.variables.push((key.clone(), value));
+            env_file.variable_order.push(key);
         }
     }
     
     // Remaining comments are header comments
-    if !current_comments.is_empty() {
-        env_file.header_comments.extend(current_comments);
+    if !comment_group_accumulator.is_empty() {
+        env_file.header_comments.extend(comment_group_accumulator);
     }
 
     println!("Parsed .env file: {} with {} variables and {} comment groups",
@@ -99,7 +109,7 @@ pub fn parse_env_file(file_path: &str) -> Result<EnvFile> {
     Ok(env_file)
 }
 
-/// Merge .env.example files in priority order: base -> environment -> extensions
+/// Concatenate .env.example files in specified order: base -> environment -> extensions
 pub fn merge_env_files(
     merger: &EnvMerger,
     environment: Option<&str>,
@@ -107,63 +117,63 @@ pub fn merge_env_files(
 ) -> Result<EnvFile> {
     let file_paths = resolve_env_merge_order(merger, environment, extensions)?;
     
-    let mut merged_variables = BTreeMap::new();
-    let mut merged_variable_comments = BTreeMap::new();
+    let mut all_content = String::new();
     let mut source_files = Vec::new();
     let mut processed_files = 0;
     
     for file_path in file_paths {
-        let env_file = match parse_env_file(&file_path) {
-            Ok(file) => {
-                println!("Loaded and merging .env file: {}", file_path);
+        match fs::read_to_string(&file_path) {
+            Ok(content) => {
+                println!("Loaded and concatenating .env file: {}", file_path);
                 processed_files += 1;
                 source_files.push(get_source_name(&file_path));
-                file
+                
+                // Add file content with separator
+                if !all_content.is_empty() && !all_content.ends_with('\n') {
+                    all_content.push('\n'); // Add separator between files if needed
+                }
+                all_content.push_str(&content);
             }
             Err(e) => {
                 // For base file, this is an error
                 if file_path.contains("/base/") {
-                    return Err(e);
+                    return Err(FileSystemError::FileReadFailed {
+                        path: file_path.into(),
+                        source: e,
+                    }.into());
                 }
                 // For other files, skip with warning
                 println!("Warning: Skipping missing .env.example file '{}': {}", file_path, e);
                 continue;
             }
-        };
-
-        // Merge variables and their comments (later files override earlier ones)
-        for (key, value) in env_file.variables {
-            merged_variables.insert(key.clone(), value);
-            
-            // If this variable has comments, store them
-            if let Some(comments) = env_file.variable_comments.get(&key) {
-                merged_variable_comments.insert(key, comments.clone());
-            }
         }
     }
 
     if processed_files == 0 {
-        println!("Warning: No .env.example files found to merge");
+        println!("Warning: No .env.example files found to concatenate");
         return Ok(EnvFile::new());
     }
 
-    let mut merged_file = EnvFile::new();
-    merged_file.variables = merged_variables;
-    merged_file.variable_comments = merged_variable_comments;
-    
-    // Set header comments
-    merged_file.header_comments.push("# Generated by stackbuilder from multiple .env.example files".to_string());
+    // Create simple structure with all content
+    let mut env_file = EnvFile::new();
+    env_file.header_comments.push("# Generated by stackbuilder from concatenated .env.example files".to_string());
     if !source_files.is_empty() {
-        merged_file.header_comments.push(format!("# Source files: {}", source_files.join(", ")));
+        env_file.header_comments.push(format!("# Source files: {}", source_files.join(", ")));
     }
 
-    println!("Successfully merged {} .env.example files with {} total variables",
-             processed_files, merged_file.variables.len());
+    // Store the entire concatenated content as single lines
+    for line in all_content.lines() {
+        env_file.variables.push((format!("line_{}", env_file.variables.len()), line.to_string()));
+        env_file.variable_order.push(format!("line_{}", env_file.variable_order.len()));
+    }
+
+    println!("Successfully concatenated {} .env.example files with {} total lines",
+             processed_files, env_file.variables.len());
     
-    Ok(merged_file)
+    Ok(env_file)
 }
 
-/// Write merged .env.example file to specified path
+/// Write concatenated .env.example file to specified path
 pub fn write_merged_env(env_file: &EnvFile, output_path: &str) -> Result<()> {
     let mut content = String::new();
 
@@ -178,30 +188,15 @@ pub fn write_merged_env(env_file: &EnvFile, output_path: &str) -> Result<()> {
         content.push('\n');
     }
 
-    // Write variables in sorted order with their associated comments
-    for (key, value) in &env_file.variables {
-        // Write comments for this variable first
-        if let Some(comments) = env_file.variable_comments.get(key) {
-            for comment in comments {
-                content.push_str(comment);
-                content.push('\n');
-            }
-        }
-        
-        // Quote values that contain spaces or special characters
-        let quoted_value = if value.contains(' ') ||
-                             value.contains('#') ||
-                             value.contains('$') ||
-                             value.is_empty() {
-            format!("\"{}\"", value)
-        } else {
-            value.clone()
-        };
-        
-        content.push_str(&format!("{}={}\n", key, quoted_value));
-        
-        // Add empty line after each variable for readability
+    // Simply write all lines in order as they appeared in original files
+    for (_, line_content) in &env_file.variables {
+        content.push_str(line_content);
         content.push('\n');
+    }
+
+    // Remove trailing newline if present
+    if content.ends_with('\n') {
+        content.pop();
     }
 
     fs::write(output_path, content)
@@ -210,7 +205,7 @@ pub fn write_merged_env(env_file: &EnvFile, output_path: &str) -> Result<()> {
             source: e,
         })?;
 
-    println!("✓ Created merged .env.example file: {}", output_path);
+    println!("✓ Created concatenated .env.example file: {}", output_path);
     Ok(())
 }
 
