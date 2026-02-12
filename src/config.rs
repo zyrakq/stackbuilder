@@ -483,11 +483,7 @@ fn validate_combo_definitions(config: &Config) -> Result<()> {
 
         for ext in extensions {
             if !available_extensions.contains(ext) {
-                return Err(ValidationError::ExtensionNotFound {
-                    name: ext.clone(),
-                    available_dirs: config.paths.extensions_dirs.clone(),
-                }
-                .into());
+                println!("ℹ Extension '{}' not found - will use base+env only", ext);
             }
         }
 
@@ -531,11 +527,10 @@ fn validate_build_targets(config: &Config, targets: &BuildTargets) -> Result<()>
         if let Some(ref extensions) = env_target.extensions {
             for ext in extensions {
                 if !available_extensions.contains(ext) {
-                    return Err(ValidationError::ExtensionNotFound {
-                        name: ext.clone(),
-                        available_dirs: config.paths.extensions_dirs.clone(),
-                    }
-                    .into());
+                    println!(
+                        "ℹ Extension '{}' not found for environment '{}' - will use base+env only",
+                        ext, env_name
+                    );
                 }
             }
         }
@@ -597,11 +592,10 @@ fn validate_build_environments(config: &Config, env_config: &BuildEnvironments) 
         if let Some(ref extensions) = env_cfg.extensions {
             for ext in extensions {
                 if !available_extensions.contains(ext) {
-                    return Err(ValidationError::ExtensionNotFound {
-                        name: ext.clone(),
-                        available_dirs: config.paths.extensions_dirs.clone(),
-                    }
-                    .into());
+                    println!(
+                        "ℹ Extension '{}' not found for environment '{}' - will use base+env only",
+                        ext, env_name
+                    );
                 }
             }
         }
@@ -673,13 +667,23 @@ pub fn resolve_paths(config: &mut Config) -> Result<()> {
     {
         let mut resolved_ext_dirs = Vec::new();
         for ext_dir in &config.paths.extensions_dirs {
-            let ext_path = components_path.join(ext_dir).canonicalize().map_err(|e| {
-                ValidationError::PathResolutionError {
-                    path: ext_dir.clone(),
-                    details: e.to_string(),
-                }
-            })?;
-            resolved_ext_dirs.push(ext_path.to_string_lossy().to_string());
+            let ext_path = components_path.join(ext_dir);
+            if ext_path.exists() {
+                let resolved =
+                    ext_path
+                        .canonicalize()
+                        .map_err(|e| ValidationError::PathResolutionError {
+                            path: ext_dir.clone(),
+                            details: e.to_string(),
+                        })?;
+                resolved_ext_dirs.push(resolved.to_string_lossy().to_string());
+            } else {
+                // Extensions directory is optional - skip if not found
+                println!(
+                    "ℹ Extensions directory '{}' not found - using base+env only",
+                    ext_dir
+                );
+            }
         }
         config.paths.extensions_dirs = resolved_ext_dirs;
     }
