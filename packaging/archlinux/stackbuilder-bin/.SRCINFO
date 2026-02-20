@@ -1,0 +1,22 @@
+pkgbase = stackbuilder-bin
+	pkgdesc = A powerful CLI tool for building Docker Compose files from modular components with multi-environment support and extension system (precompiled AppImage binary)
+	pkgver = 0.1.0
+	pkgrel = 1
+	url = https://github.com/zyrakq/stackbuilder
+	arch = x86_64
+	arch = aarch64
+	license = MIT
+	license = Apache-2.0
+	depends = fuse2
+	depends = zlib
+	optdepends = go-yq: YAML processing support
+	provides = stackbuilder
+	conflicts = stackbuilder
+	conflicts = stackbuilder-git
+	noextract = stackbuilder-0.1.0-x86_64.AppImage
+	source_x86_64 = stackbuilder-0.1.0-x86_64.AppImage::https://github.com/zyrakq/stackbuilder/releases/download/v0.1.0/stackbuilder-0.1.0-x86_64.AppImage
+	sha256sums_x86_64 = SKIP
+	source_aarch64 = stackbuilder-0.1.0-aarch64.AppImage::https://github.com/zyrakq/stackbuilder/releases/download/v0.1.0/stackbuilder-0.1.0-aarch64.AppImage
+	sha256sums_aarch64 = SKIP
+
+pkgname = stackbuilder-bin

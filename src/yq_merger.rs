@@ -1,6 +1,6 @@
-use std::process::{Command, Stdio};
+use crate::error::{BuildError, Result, YamlError};
 use std::path::Path;
-use crate::error::{Result, YamlError, BuildError};
+use std::process::{Command, Stdio};
 
 /// Structure for managing docker-compose file merging process using yq
 #[derive(Debug)]
@@ -12,7 +12,11 @@ pub struct YqMerger {
 
 impl YqMerger {
     /// Create new YqMerger with given paths
-    pub fn new(base_path: String, environments_path: String, extensions_paths: Vec<String>) -> Self {
+    pub fn new(
+        base_path: String,
+        environments_path: String,
+        extensions_paths: Vec<String>,
+    ) -> Self {
         Self {
             base_path,
             environments_path,
@@ -45,24 +49,29 @@ pub fn check_yq_availability() -> Result<String> {
             details: format!(
                 "yq command failed. Please ensure yq v4+ is properly installed.\n\
                 Installation instructions: https://github.com/mikefarah/yq#install\n\
-                Error: {}", stderr
+                Error: {}",
+                stderr
             ),
-        }.into());
+        }
+        .into());
     }
 
     let version_output = String::from_utf8_lossy(&output.stdout);
-    
+
     // Check if it's yq v4+ (mikefarah's version)
-    if !version_output.contains("mikefarah") && !version_output.starts_with("yq (https://github.com/mikefarah/yq/)") {
+    if !version_output.contains("mikefarah")
+        && !version_output.starts_with("yq (https://github.com/mikefarah/yq/)")
+    {
         return Err(BuildError::BuildProcessFailed {
             details: format!(
                 "Wrong yq version detected. Please install yq v4+ from mikefarah (Go version).\n\
                 Current version: {}\n\
                 Required: yq v4+ from https://github.com/mikefarah/yq\n\
-                Installation: https://github.com/mikefarah/yq#install", 
+                Installation: https://github.com/mikefarah/yq#install",
                 version_output.trim()
             ),
-        }.into());
+        }
+        .into());
     }
 
     println!("✓ yq version: {}", version_output.trim());
@@ -76,7 +85,8 @@ pub fn yq_load_compose_file(file_path: &str) -> Result<()> {
         return Err(YamlError::ParseError {
             file: file_path.to_string(),
             details: "File does not exist".to_string(),
-        }.into());
+        }
+        .into());
     }
 
     // Validate YAML syntax using yq
@@ -97,7 +107,8 @@ pub fn yq_load_compose_file(file_path: &str) -> Result<()> {
         return Err(YamlError::ParseError {
             file: file_path.to_string(),
             details: format!("YAML syntax error: {}", stderr),
-        }.into());
+        }
+        .into());
     }
 
     Ok(())
@@ -123,17 +134,19 @@ pub fn yq_validate_compose_structure(file_path: &str) -> Result<()> {
         return Err(YamlError::InvalidComposeFormat {
             file: file_path.to_string(),
             details: format!("Structure validation failed: {}", stderr),
-        }.into());
+        }
+        .into());
     }
 
     let services_output = String::from_utf8_lossy(&output.stdout);
-    
+
     // Check if services section is null or empty
     if services_output.trim() == "null" || services_output.trim().is_empty() {
         return Err(YamlError::InvalidComposeFormat {
             file: file_path.to_string(),
             details: "Missing required 'services' section in docker-compose file".to_string(),
-        }.into());
+        }
+        .into());
     }
 
     println!("✓ Validated structure for: {}", file_path);
@@ -147,11 +160,12 @@ pub fn yq_merge_compose_files(
     extensions: &[String],
 ) -> Result<String> {
     let file_paths = resolve_merge_order(merger, environment, extensions)?;
-    
+
     if file_paths.is_empty() {
         return Err(YamlError::MergeError {
             details: "No files to merge".to_string(),
-        }.into());
+        }
+        .into());
     }
 
     // Validate all files first
@@ -184,7 +198,10 @@ pub fn yq_merge_compose_files(
                     return Err(e);
                 }
                 // For other files, skip with warning
-                println!("Warning: Skipping missing or invalid file '{}': {}", file_path, e);
+                println!(
+                    "Warning: Skipping missing or invalid file '{}': {}",
+                    file_path, e
+                );
                 continue;
             }
         }
@@ -193,7 +210,8 @@ pub fn yq_merge_compose_files(
     if processed_files == 0 {
         return Err(YamlError::MergeError {
             details: "No valid docker-compose files found to merge".to_string(),
-        }.into());
+        }
+        .into());
     }
 
     // If only one file, just return its content
@@ -213,23 +231,23 @@ pub fn yq_merge_compose_files(
         cmd.arg(file_path);
     }
 
-    let output = cmd.output()
-        .map_err(|e| YamlError::MergeError {
-            details: format!("Failed to execute yq merge: {}", e),
-        })?;
+    let output = cmd.output().map_err(|e| YamlError::MergeError {
+        details: format!("Failed to execute yq merge: {}", e),
+    })?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(YamlError::MergeError {
             details: format!("yq merge failed: {}", stderr),
-        }.into());
+        }
+        .into());
     }
 
     let merged_content = String::from_utf8_lossy(&output.stdout);
-    
+
     // Clean up null values and format
     let cleaned_content = clean_yaml_null_values(merged_content.to_string());
-    
+
     Ok(cleaned_content)
 }
 
@@ -254,12 +272,13 @@ pub fn yq_format_file(file_path: &str) -> Result<String> {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(YamlError::SerializationError {
             details: format!("yq format failed: {}", stderr),
-        }.into());
+        }
+        .into());
     }
 
     let formatted_content = String::from_utf8_lossy(&output.stdout);
     let cleaned_content = clean_yaml_null_values(formatted_content.to_string());
-    
+
     Ok(cleaned_content)
 }
 
@@ -294,9 +313,12 @@ pub fn resolve_merge_order(
                 break; // Found in first matching directory
             }
         }
-        
+
         if !found {
-            println!("Warning: Extension '{}' not found in any extensions directory", ext);
+            println!(
+                "Warning: Extension '{}' not found in any extensions directory",
+                ext
+            );
         }
     }
 
@@ -306,15 +328,15 @@ pub fn resolve_merge_order(
 /// Clean YAML string from null values (~ symbols) in volumes sections
 fn clean_yaml_null_values(yaml_content: String) -> String {
     use regex::Regex;
-    
+
     // Replace patterns like "volume_name: ~" or "volume_name: null" with "volume_name:"
     let re = Regex::new(r"(\s+\w+):\s*(?:~|null)\s*$").unwrap();
     let cleaned = re.replace_all(&yaml_content, "$1:");
-    
+
     // Also handle inline null values in volumes sections
     let re2 = Regex::new(r"(\s+\w+):\s*(?:~|null)\s*\n").unwrap();
     let cleaned2 = re2.replace_all(&cleaned, "$1:\n");
-    
+
     cleaned2.to_string()
 }
 
@@ -336,9 +358,9 @@ mod tests {
             "/components/environments".to_string(),
             vec!["/components/extensions".to_string()],
         );
-        
+
         let result = resolve_merge_order(&merger, Some("dev"), &["ext1".to_string()]).unwrap();
-        
+
         // Extension doesn't exist, so only base + environment
         assert_eq!(result.len(), 2);
         assert!(result[0].contains("base/docker-compose.yml"));

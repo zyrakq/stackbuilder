@@ -15,20 +15,44 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
-# Function to build Arch Linux package
+# Function to build Arch Linux stable package
 build_arch() {
-    echo "=== Building Arch Linux package ==="
+    echo "=== Building Arch Linux stable package ==="
     if ! command_exists makepkg; then
         echo "❌ makepkg not found. Install base-devel package on Arch Linux."
         return 1
     fi
     
     ORIGINAL_DIR="$(pwd)"
-    cd packaging/archlinux
+    cd packaging/archlinux/stackbuilder
     makepkg -sf --noconfirm
-    echo "✅ Arch Linux package built successfully"
-    echo "Package location: packaging/archlinux/*.pkg.tar.zst"
+    echo "✅ Arch Linux stable package built successfully"
+    echo "Package location: packaging/archlinux/stackbuilder/*.pkg.tar.zst"
     cd "$ORIGINAL_DIR"
+}
+
+# Function to build Arch Linux git package
+build_arch_git() {
+    echo "=== Building Arch Linux git package ==="
+    if ! command_exists makepkg; then
+        echo "❌ makepkg not found. Install base-devel package on Arch Linux."
+        return 1
+    fi
+    
+    ORIGINAL_DIR="$(pwd)"
+    cd packaging/archlinux/stackbuilder-git
+    makepkg -sf --noconfirm
+    echo "✅ Arch Linux git package built successfully"
+    echo "Package location: packaging/archlinux/stackbuilder-git/*.pkg.tar.zst"
+    cd "$ORIGINAL_DIR"
+}
+
+# Function to build Arch Linux bin package (skipped - requires AppImage in release)
+build_arch_bin() {
+    echo "=== Building Arch Linux bin package ==="
+    echo "⚠️  Skipped: stackbuilder-bin requires AppImage files in GitHub releases"
+    echo "   Build AppImage first with: ./packaging/appimage/build-appimage.sh"
+    return 0
 }
 
 # Function to build Debian package
@@ -131,12 +155,24 @@ echo
 for distro in "${DISTROS[@]}"; do
     case $distro in
         arch|archlinux)
+            # Build stable and git variants for Arch
             if build_arch; then
                 echo
             else
-                FAILED+=("arch")
+                FAILED+=("arch-stable")
                 echo
             fi
+            
+            if build_arch_git; then
+                echo
+            else
+                FAILED+=("arch-git")
+                echo
+            fi
+            
+            # Skip bin variant for now (requires AppImage in releases)
+            build_arch_bin
+            echo
             ;;
         debian|ubuntu)
             if build_debian; then

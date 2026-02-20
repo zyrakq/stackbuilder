@@ -1,13 +1,13 @@
-mod merger;
-mod yq_merger;
 mod env_merger;
 mod error;
+mod merger;
+mod yq_merger;
 use clap::{Parser, Subcommand};
-mod config;
-mod init;
 mod build;
-mod file_copier;
 mod build_cleaner;
+mod config;
+mod file_copier;
+mod init;
 
 #[cfg(test)]
 mod tests;
@@ -16,7 +16,9 @@ mod tests;
 #[command(name = "stackbuilder")]
 #[command(version)]
 #[command(about = "A tool for building docker-compose files from modular components")]
-#[command(long_about = "Stackbuilder is a CLI tool designed to build docker-compose files from modular components.\n\nExamples:\n  stackbuilder init --name my-project\n  stackbuilder build --config ./config.yml")]
+#[command(
+    long_about = "Stackbuilder is a CLI tool designed to build docker-compose files from modular components.\n\nExamples:\n  stackbuilder init --name my-project\n  stackbuilder build --config ./config.yml"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -30,7 +32,7 @@ enum Commands {
     Build,
 }
 
-use crate::error::{StackBuilderError, Result};
+use crate::error::{Result, StackBuilderError};
 
 fn run_build() -> Result<()> {
     build::execute_build()
@@ -42,12 +44,12 @@ fn run_init(args: &init::InitArgs) -> Result<()> {
 
 fn print_error(error: &StackBuilderError) {
     eprintln!("Error: {}", error);
-    
+
     // Print suggestion if available
     if let Some(suggestion) = error.suggestion() {
         eprintln!("\nSuggestion: {}", suggestion);
     }
-    
+
     // Add context for common error patterns
     if error.suggests_init() {
         eprintln!("\nTo create a new project, run:");

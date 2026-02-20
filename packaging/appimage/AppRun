@@ -1,0 +1,15 @@
+#!/bin/bash
+
+# AppRun script for stackbuilder AppImage
+# This is the entry point when the AppImage is executed
+
+set -e
+
+# Get the directory where this AppRun script is located
+APPDIR="$(dirname "$(readlink -f "$0")")"
+
+# Export library path for bundled libraries
+export LD_LIBRARY_PATH="${APPDIR}/usr/lib:${LD_LIBRARY_PATH}"
+
+# Run the actual binary
+exec "${APPDIR}/usr/bin/stackbuilder" "$@"

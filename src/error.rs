@@ -6,19 +6,19 @@ use thiserror::Error;
 pub enum StackBuilderError {
     #[error(transparent)]
     Config(#[from] ConfigError),
-    
+
     #[error(transparent)]
     Validation(#[from] ValidationError),
-    
+
     #[error(transparent)]
     Build(#[from] BuildError),
-    
+
     #[error(transparent)]
     FileSystem(#[from] FileSystemError),
-    
+
     #[error(transparent)]
     Yaml(#[from] YamlError),
-    
+
     #[error(transparent)]
     Init(#[from] InitError),
 }
@@ -26,15 +26,20 @@ pub enum StackBuilderError {
 /// Configuration-related errors
 #[derive(Error, Debug)]
 pub enum ConfigError {
-    #[error("Configuration file '{file}' not found. Run 'stackbuilder init' to create a new project")]
+    #[error(
+        "Configuration file '{file}' not found. Run 'stackbuilder init' to create a new project"
+    )]
     ConfigFileNotFound { file: String },
-    
+
     #[error("Failed to read configuration file '{file}': {source}")]
-    ConfigFileReadError { file: String, source: std::io::Error },
-    
+    ConfigFileReadError {
+        file: String,
+        source: std::io::Error,
+    },
+
     #[error("Invalid TOML syntax in configuration file '{file}': {details}")]
     InvalidTomlSyntax { file: String, details: String },
-    
+
     #[error("Failed to serialize configuration to TOML: {details}")]
     TomlSerializationError { details: String },
 }
@@ -44,23 +49,30 @@ pub enum ConfigError {
 pub enum ValidationError {
     #[error("Components directory '{path}' does not exist. Run 'stackbuilder init' to create project structure")]
     ComponentsDirectoryNotFound { path: PathBuf },
-    
+
     #[error("Base directory '{path}' does not exist in components directory. Create base/docker-compose.yml file")]
     BaseDirectoryNotFound { path: PathBuf },
-    
+
     #[cfg(test)]
     #[error("Environment '{name}' does not exist in environments directory '{path}'")]
     EnvironmentNotFound { name: String, path: PathBuf },
-    
+
+    #[cfg(test)]
     #[error("Extension '{name}' not found in any extensions directory. Available directories: {available_dirs:?}")]
-    ExtensionNotFound { name: String, available_dirs: Vec<String> },
-    
+    ExtensionNotFound {
+        name: String,
+        available_dirs: Vec<String>,
+    },
+
     #[error("Combo '{combo_name}' not found in combo definitions. Available combos: {available_combos:?}")]
-    ComboNotFound { combo_name: String, available_combos: Vec<String> },
-    
+    ComboNotFound {
+        combo_name: String,
+        available_combos: Vec<String>,
+    },
+
     #[error("Invalid combo definition for '{combo_name}': {details}")]
     InvalidComboDefinition { combo_name: String, details: String },
-    
+
     #[error("Invalid path resolution for '{path}': {details}")]
     PathResolutionError { path: String, details: String },
 }
@@ -69,8 +81,11 @@ pub enum ValidationError {
 #[derive(Error, Debug)]
 pub enum BuildError {
     #[error("Failed to write merged docker-compose file to '{path}': {source}")]
-    OutputFileWriteError { path: PathBuf, source: std::io::Error },
-    
+    OutputFileWriteError {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+
     #[error("Build process failed: {details}")]
     BuildProcessFailed { details: String },
 }
@@ -80,16 +95,28 @@ pub enum BuildError {
 #[allow(clippy::enum_variant_names)]
 pub enum FileSystemError {
     #[error("Failed to create directory '{path}': {source}")]
-    DirectoryCreationFailed { path: PathBuf, source: std::io::Error },
-    
+    DirectoryCreationFailed {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+
     #[error("Failed to read directory '{path}': {source}")]
-    DirectoryReadFailed { path: PathBuf, source: std::io::Error },
-    
+    DirectoryReadFailed {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+
     #[error("Failed to read file '{path}': {source}")]
-    FileReadFailed { path: PathBuf, source: std::io::Error },
-    
+    FileReadFailed {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+
     #[error("Failed to write file '{path}': {source}")]
-    FileWriteFailed { path: PathBuf, source: std::io::Error },
+    FileWriteFailed {
+        path: PathBuf,
+        source: std::io::Error,
+    },
 }
 
 /// YAML processing errors
@@ -97,13 +124,13 @@ pub enum FileSystemError {
 pub enum YamlError {
     #[error("Failed to parse YAML file '{file}': {details}")]
     ParseError { file: String, details: String },
-    
+
     #[error("YAML serialization failed: {details}")]
     SerializationError { details: String },
-    
+
     #[error("YAML merge operation failed: {details}")]
     MergeError { details: String },
-    
+
     #[error("Docker Compose file '{file}' has invalid format: {details}")]
     InvalidComposeFormat { file: String, details: String },
 }
@@ -113,7 +140,7 @@ pub enum YamlError {
 pub enum InitError {
     #[error("Cannot create project structure: {source}")]
     ProjectStructureCreationFailed { source: std::io::Error },
-    
+
     #[error("Failed to create example files: {details}")]
     ExampleFileCreationFailed { details: String },
 }
@@ -130,17 +157,19 @@ impl StackBuilderError {
             StackBuilderError::Init(_) => 6,
         }
     }
-    
+
     /// Check if this error suggests running init command
     pub fn suggests_init(&self) -> bool {
         matches!(
             self,
-            StackBuilderError::Config(ConfigError::ConfigFileNotFound { .. }) |
-            StackBuilderError::Validation(ValidationError::ComponentsDirectoryNotFound { .. }) |
-            StackBuilderError::Validation(ValidationError::BaseDirectoryNotFound { .. })
+            StackBuilderError::Config(ConfigError::ConfigFileNotFound { .. })
+                | StackBuilderError::Validation(
+                    ValidationError::ComponentsDirectoryNotFound { .. }
+                )
+                | StackBuilderError::Validation(ValidationError::BaseDirectoryNotFound { .. })
         )
     }
-    
+
     /// Get helpful suggestion for fixing this error
     pub fn suggestion(&self) -> Option<String> {
         match self {
@@ -153,6 +182,7 @@ impl StackBuilderError {
             StackBuilderError::Validation(ValidationError::BaseDirectoryNotFound { .. }) => {
                 Some("Create a base/docker-compose.yml file in your components directory".to_string())
             }
+            #[cfg(test)]
             StackBuilderError::Validation(ValidationError::ExtensionNotFound { name, .. }) => {
                 Some(format!("Create an extension directory and docker-compose.yml file for '{}'", name))
             }
@@ -172,14 +202,14 @@ impl ConfigError {
     pub fn config_not_found(file: impl Into<String>) -> Self {
         Self::ConfigFileNotFound { file: file.into() }
     }
-    
+
     pub fn toml_parse_error(file: impl Into<String>, error: toml::de::Error) -> Self {
         Self::InvalidTomlSyntax {
             file: file.into(),
             details: error.to_string(),
         }
     }
-    
+
     pub fn toml_serialize_error(error: toml::ser::Error) -> Self {
         Self::TomlSerializationError {
             details: error.to_string(),
@@ -195,7 +225,7 @@ impl ValidationError {
             path: path.into(),
         }
     }
-    
+
     #[cfg(test)]
     pub fn extension_not_found(name: impl Into<String>, available_dirs: Vec<String>) -> Self {
         Self::ExtensionNotFound {
@@ -212,7 +242,7 @@ impl YamlError {
             details: error.to_string(),
         }
     }
-    
+
     #[cfg(test)]
     pub fn parse_error(file: impl Into<String>, details: impl Into<String>) -> Self {
         Self::ParseError {

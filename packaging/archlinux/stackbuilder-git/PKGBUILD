@@ -1,0 +1,66 @@
+# Maintainer: Zyrakq <serg.shehov@tutanota.com>
+pkgname=stackbuilder-git
+_pkgname=stackbuilder
+pkgver=0.1.0.r32.gc70d2e9
+pkgrel=1
+pkgdesc="A powerful CLI tool for building Docker Compose files from modular components with multi-environment support and extension system (development version)"
+arch=('x86_64' 'i686' 'aarch64')
+url="https://github.com/zyrakq/stackbuilder"
+license=('MIT' 'Apache-2.0')
+depends=('gcc-libs' 'go-yq')
+makedepends=('rust' 'cargo' 'git')
+provides=('stackbuilder')
+conflicts=('stackbuilder')
+source=("git+https://github.com/zyrakq/${_pkgname}.git#branch=master")
+sha256sums=('SKIP')
+
+pkgver() {
+    cd "${_pkgname}"
+    # Get version from Cargo.toml
+    local _version=$(grep "^version = " Cargo.toml | sed 's/version = "//;s/"$//')
+    # Get commit count and short hash
+    local _commit_count=$(git rev-list --count HEAD)
+    local _short_hash=$(git rev-parse --short HEAD)
+    echo "${_version}.r${_commit_count}.g${_short_hash}"
+}
+
+prepare() {
+    cd "${_pkgname}"
+    export RUSTUP_TOOLCHAIN=stable
+    cargo fetch --locked --target "${CARCH}-unknown-linux-gnu"
+}
+
+build() {
+    cd "${_pkgname}"
+    export RUSTUP_TOOLCHAIN=stable
+    export CARGO_TARGET_DIR=target
+    cargo build --frozen --release --all-features
+}
+
+check() {
+    cd "${_pkgname}"
+    export RUSTUP_TOOLCHAIN=stable
+    cargo test --frozen --all-features
+}
+
+package() {
+    cd "${_pkgname}"
+    install -Dm0755 -t "${pkgdir}/usr/bin/" "target/release/${_pkgname}"
+    
+    # Create symlink with short name
+    ln -s "${_pkgname}" "${pkgdir}/usr/bin/sb"
+    
+    # Install documentation
+    install -Dm644 README.md "${pkgdir}/usr/share/doc/${_pkgname}/README.md"
+    install -Dm644 docs/config.md "${pkgdir}/usr/share/doc/${_pkgname}/config.md"
+    install -Dm644 docs/build.md "${pkgdir}/usr/share/doc/${_pkgname}/build.md"
+    install -Dm644 docs/testing-report.md "${pkgdir}/usr/share/doc/${_pkgname}/testing-report.md"
+    install -Dm644 docs/yaml-merger.md "${pkgdir}/usr/share/doc/${_pkgname}/yaml-merger.md"
+    
+    # Install licenses
+    install -Dm644 LICENSE-MIT "${pkgdir}/usr/share/licenses/${_pkgname}/LICENSE-MIT"
+    install -Dm644 LICENSE-APACHE "${pkgdir}/usr/share/licenses/${_pkgname}/LICENSE-APACHE"
+    
+    # Install examples
+    cp -r examples "${pkgdir}/usr/share/doc/${_pkgname}/"
+}

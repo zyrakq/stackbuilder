@@ -1,8 +1,8 @@
+use crate::config;
+use crate::error::{ConfigError, FileSystemError, InitError, Result};
+use clap::Parser;
 use std::fs;
 use std::path::Path;
-use clap::Parser;
-use crate::config;
-use crate::error::{Result, InitError, ConfigError, FileSystemError};
 
 /// Runs the init command logic
 pub fn run_init(args: &InitArgs) -> Result<()> {
@@ -15,32 +15,30 @@ pub fn run_init(args: &InitArgs) -> Result<()> {
     if !config_exists {
         // Create default config
         let default_config = config::Config::default();
-        let toml_content = toml::to_string(&default_config)
-            .map_err(ConfigError::toml_serialize_error)?;
-        fs::write(CONFIG_FILE, toml_content)
-            .map_err(|e| FileSystemError::FileWriteFailed {
-                path: config_path.to_path_buf(),
-                source: e,
-            })?;
+        let toml_content =
+            toml::to_string(&default_config).map_err(ConfigError::toml_serialize_error)?;
+        fs::write(CONFIG_FILE, toml_content).map_err(|e| FileSystemError::FileWriteFailed {
+            path: config_path.to_path_buf(),
+            source: e,
+        })?;
         println!("Created default configuration file: {}", CONFIG_FILE);
     } else if !args.force {
         println!("Configuration file already exists: {}", CONFIG_FILE);
     } else {
         println!("Overwriting existing configuration file: {}", CONFIG_FILE);
         let default_config = config::Config::default();
-        let toml_content = toml::to_string(&default_config)
-            .map_err(ConfigError::toml_serialize_error)?;
-        fs::write(CONFIG_FILE, toml_content)
-            .map_err(|e| FileSystemError::FileWriteFailed {
-                path: config_path.to_path_buf(),
-                source: e,
-            })?;
+        let toml_content =
+            toml::to_string(&default_config).map_err(ConfigError::toml_serialize_error)?;
+        fs::write(CONFIG_FILE, toml_content).map_err(|e| FileSystemError::FileWriteFailed {
+            path: config_path.to_path_buf(),
+            source: e,
+        })?;
         println!("Overwrote configuration file: {}", CONFIG_FILE);
     }
 
     // Step 2: Read the config
-    let config_content = fs::read_to_string(CONFIG_FILE)
-        .map_err(|e| FileSystemError::FileReadFailed {
+    let config_content =
+        fs::read_to_string(CONFIG_FILE).map_err(|e| FileSystemError::FileReadFailed {
             path: config_path.to_path_buf(),
             source: e,
         })?;
@@ -106,7 +104,10 @@ fn create_example_compose(config: &config::Config) -> Result<()> {
     let compose_file = base_dir_path.join("docker-compose.yml");
 
     if compose_file.exists() {
-        println!("docker-compose.yml already exists in: {}", compose_file.display());
+        println!(
+            "docker-compose.yml already exists in: {}",
+            compose_file.display()
+        );
         return Ok(());
     }
 
@@ -122,11 +123,19 @@ services:
 
     fs::create_dir_all(&base_dir_path)
         .map_err(|e| InitError::ProjectStructureCreationFailed { source: e })?;
-    fs::write(&compose_file, example_content)
-        .map_err(|e| InitError::ExampleFileCreationFailed {
-            details: format!("Failed to write docker-compose.yml to {}: {}", compose_file.display(), e),
-        })?;
-    println!("Created example docker-compose.yml in: {}", compose_file.display());
+    fs::write(&compose_file, example_content).map_err(|e| {
+        InitError::ExampleFileCreationFailed {
+            details: format!(
+                "Failed to write docker-compose.yml to {}: {}",
+                compose_file.display(),
+                e
+            ),
+        }
+    })?;
+    println!(
+        "Created example docker-compose.yml in: {}",
+        compose_file.display()
+    );
 
     Ok(())
 }
@@ -136,7 +145,7 @@ pub struct InitArgs {
     /// Skip creating folders, only create config
     #[arg(long)]
     pub skip_folders: bool,
-    
+
     /// Force overwrite existing configuration file
     #[arg(long)]
     pub force: bool,

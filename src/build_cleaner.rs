@@ -1,7 +1,7 @@
-use std::fs;
-use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Structure for managing build directory cleaning with .env file preservation
@@ -78,7 +78,8 @@ impl BuildCleaner {
         println!("Starting intelligent build directory cleanup with .env preservation");
 
         // Step 1: Scan for .env files before cleanup
-        let scan_result = self.scan_env_files()
+        let scan_result = self
+            .scan_env_files()
             .context("Failed to scan for .env files")?;
 
         if scan_result.count == 0 {
@@ -96,7 +97,7 @@ impl BuildCleaner {
             .context("Failed to clean build directory")?;
 
         println!("✓ Build directory cleaned, .env files preserved in memory for restoration");
-        
+
         Ok(())
     }
 
@@ -124,7 +125,8 @@ impl BuildCleaner {
         println!("Restoring preserved .env files to new build structure");
 
         // Generate path mappings
-        let mappings = self.generate_path_mappings(&preserved_files, new_structure)
+        let mappings = self
+            .generate_path_mappings(&preserved_files, new_structure)
             .context("Failed to generate path mappings")?;
 
         // Try to restore files according to mappings
@@ -133,23 +135,32 @@ impl BuildCleaner {
 
         for preserved_file in &preserved_files {
             let restore_result = self.restore_single_file(preserved_file, &mappings);
-            
+
             match restore_result {
                 Ok(RestoreResult::Restored(path)) => {
                     println!("✓ Restored .env file to: {}", path.display());
                     restored_count += 1;
                 }
                 Ok(RestoreResult::SkippedNoMatch) => {
-                    println!("ℹ Skipped .env file (no matching structure): {}", preserved_file.original_path.display());
+                    println!(
+                        "ℹ Skipped .env file (no matching structure): {}",
+                        preserved_file.original_path.display()
+                    );
                     failed_files.push(preserved_file.clone());
                 }
                 Ok(RestoreResult::SkippedConflict) => {
-                    println!("⚠ Skipped .env file (content conflict): {}", preserved_file.original_path.display());
+                    println!(
+                        "⚠ Skipped .env file (content conflict): {}",
+                        preserved_file.original_path.display()
+                    );
                     failed_files.push(preserved_file.clone());
                 }
                 Err(e) => {
-                    println!("✗ Failed to restore .env file from {}: {}",
-                            preserved_file.original_path.display(), e);
+                    println!(
+                        "✗ Failed to restore .env file from {}: {}",
+                        preserved_file.original_path.display(),
+                        e
+                    );
                     failed_files.push(preserved_file.clone());
                 }
             }
@@ -157,14 +168,24 @@ impl BuildCleaner {
 
         // Only create backup if some files couldn't be restored
         if !failed_files.is_empty() {
-            println!("Creating backup for {} files that couldn't be restored", failed_files.len());
+            println!(
+                "Creating backup for {} files that couldn't be restored",
+                failed_files.len()
+            );
             self.create_backup_for_failed_files(&failed_files)
                 .context("Failed to create backup for failed files")?;
         }
 
-        println!("Restoration completed: {} restored successfully", restored_count);
+        println!(
+            "Restoration completed: {} restored successfully",
+            restored_count
+        );
         if !failed_files.is_empty() {
-            println!("ℹ {} files backed up to: {}", failed_files.len(), self.backup_dir.display());
+            println!(
+                "ℹ {} files backed up to: {}",
+                failed_files.len(),
+                self.backup_dir.display()
+            );
         }
 
         // Clear memory storage
@@ -198,8 +219,8 @@ impl BuildCleaner {
         files: &mut Vec<PreservedEnvFile>,
     ) -> Result<()> {
         for entry in fs::read_dir(current_dir)
-            .with_context(|| format!("Failed to read directory: {}", current_dir.display()))? {
-            
+            .with_context(|| format!("Failed to read directory: {}", current_dir.display()))?
+        {
             let entry = entry.context("Failed to read directory entry")?;
             let path = entry.path();
 
@@ -210,9 +231,10 @@ impl BuildCleaner {
                 }
                 self.scan_directory_recursive(&path, base_dir, files)?;
             } else if self.is_env_file(&path) {
-                let relative_path = path.strip_prefix(base_dir)
+                let relative_path = path
+                    .strip_prefix(base_dir)
                     .context("Failed to calculate relative path")?;
-                
+
                 let content = fs::read_to_string(&path)
                     .with_context(|| format!("Failed to read .env file: {}", path.display()))?;
 
@@ -225,8 +247,12 @@ impl BuildCleaner {
                     extensions: extensions.clone(),
                 });
 
-                println!("Found .env file: {} (env: {:?}, ext: {:?})",
-                        relative_path.display(), environment, extensions);
+                println!(
+                    "Found .env file: {} (env: {:?}, ext: {:?})",
+                    relative_path.display(),
+                    environment,
+                    extensions
+                );
             }
         }
 
@@ -247,7 +273,8 @@ impl BuildCleaner {
 
     /// Analyze .env file path to extract environment and extension info
     fn analyze_env_file_path(&self, path: &Path) -> (Option<String>, Vec<String>) {
-        let path_components: Vec<&str> = path.components()
+        let path_components: Vec<&str> = path
+            .components()
             .filter_map(|c| c.as_os_str().to_str())
             .collect();
 
@@ -263,9 +290,9 @@ impl BuildCleaner {
         if path_components.len() >= 2 {
             // First component is likely environment
             environment = Some(path_components[0].to_string());
-            
+
             // Subsequent components before filename are likely extensions
-            for &component in &path_components[1..path_components.len()-1] {
+            for &component in &path_components[1..path_components.len() - 1] {
                 if component != "base" {
                     extensions.push(component.to_string());
                 }
@@ -281,47 +308,65 @@ impl BuildCleaner {
     /// Store .env files in memory for temporary preservation during build
     fn store_env_files_in_memory(&self, files: &[PreservedEnvFile]) {
         *self.preserved_files.borrow_mut() = Some(files.to_vec());
-        println!("✓ Stored {} .env files in memory for restoration", files.len());
+        println!(
+            "✓ Stored {} .env files in memory for restoration",
+            files.len()
+        );
     }
 
     /// Create backup only for files that couldn't be restored
     fn create_backup_for_failed_files(&self, files: &[PreservedEnvFile]) -> Result<()> {
         let backup_path = self.get_backup_path();
-        
+
         // Create backup directory
-        fs::create_dir_all(&backup_path)
-            .with_context(|| format!("Failed to create backup directory: {}", backup_path.display()))?;
+        fs::create_dir_all(&backup_path).with_context(|| {
+            format!(
+                "Failed to create backup directory: {}",
+                backup_path.display()
+            )
+        })?;
 
         // Save metadata
         let metadata_path = backup_path.join("metadata.json");
         let metadata_json = serde_json::to_string_pretty(files)
             .context("Failed to serialize .env files metadata")?;
-        
-        fs::write(&metadata_path, metadata_json)
-            .with_context(|| format!("Failed to write metadata file: {}", metadata_path.display()))?;
+
+        fs::write(&metadata_path, metadata_json).with_context(|| {
+            format!("Failed to write metadata file: {}", metadata_path.display())
+        })?;
 
         // Save files with full path as filename (replacing / and \ with _)
         for file in files.iter() {
-            let safe_filename = file.original_path.to_string_lossy()
+            let safe_filename = file
+                .original_path
+                .to_string_lossy()
                 .replace(['/', '\\'], "_");
             let backup_file_path = backup_path.join(&safe_filename);
-            
-            fs::write(&backup_file_path, &file.content)
-                .with_context(|| format!("Failed to backup .env file: {}", backup_file_path.display()))?;
-            
-            println!("  Backed up: {} -> {}", file.original_path.display(), safe_filename);
+
+            fs::write(&backup_file_path, &file.content).with_context(|| {
+                format!("Failed to backup .env file: {}", backup_file_path.display())
+            })?;
+
+            println!(
+                "  Backed up: {} -> {}",
+                file.original_path.display(),
+                safe_filename
+            );
         }
 
-        println!("✓ Created backup for {} .env files: {}", files.len(), backup_path.display());
+        println!(
+            "✓ Created backup for {} .env files: {}",
+            files.len(),
+            backup_path.display()
+        );
         Ok(())
     }
 
-
     /// Generate path mappings from old to new structure
     fn generate_path_mappings(
-        &self, 
-        preserved_files: &[PreservedEnvFile], 
-        new_structure: &[String]
+        &self,
+        preserved_files: &[PreservedEnvFile],
+        new_structure: &[String],
     ) -> Result<Vec<PathMapping>> {
         let mut mappings = Vec::new();
 
@@ -330,12 +375,19 @@ impl BuildCleaner {
             mappings.push(best_mapping);
         }
 
-        println!("Generated {} path mappings for .env restoration", mappings.len());
+        println!(
+            "Generated {} path mappings for .env restoration",
+            mappings.len()
+        );
         Ok(mappings)
     }
 
     /// Find best path mapping for a preserved .env file - only restore to exact original structure
-    fn find_best_path_mapping(&self, file: &PreservedEnvFile, new_structure: &[String]) -> PathMapping {
+    fn find_best_path_mapping(
+        &self,
+        file: &PreservedEnvFile,
+        new_structure: &[String],
+    ) -> PathMapping {
         // Try to find exact match in new structure
         for new_path_str in new_structure {
             let expected_dir = if let Some(parent) = file.original_path.parent() {
@@ -343,17 +395,21 @@ impl BuildCleaner {
             } else {
                 String::new()
             };
-            
+
             // Check if this new path matches the expected directory structure
-            if new_path_str == &expected_dir || (expected_dir.is_empty() && new_path_str.is_empty()) {
-                let filename = file.original_path.file_name()
-                    .unwrap_or_default().to_string_lossy();
+            if new_path_str == &expected_dir || (expected_dir.is_empty() && new_path_str.is_empty())
+            {
+                let filename = file
+                    .original_path
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy();
                 let new_path = if new_path_str.is_empty() {
                     PathBuf::from(filename.as_ref())
                 } else {
                     PathBuf::from(new_path_str).join(filename.as_ref())
                 };
-                
+
                 return PathMapping {
                     old_path: file.original_path.clone(),
                     new_path,
@@ -361,26 +417,31 @@ impl BuildCleaner {
                 };
             }
         }
-        
+
         // No exact match found - file will remain in backup
         PathMapping {
             old_path: file.original_path.clone(),
             new_path: file.original_path.clone(), // Will not be used
-            confidence: 0.0, // No restoration possible
+            confidence: 0.0,                      // No restoration possible
         }
     }
-
 
     /// Restore a single .env file - only to exact original location, no fallbacks in build
     fn restore_single_file(
         &self,
         file: &PreservedEnvFile,
-        mappings: &[PathMapping]
+        mappings: &[PathMapping],
     ) -> Result<RestoreResult> {
         // Find mapping for this file
-        let mapping = mappings.iter()
+        let mapping = mappings
+            .iter()
             .find(|m| m.old_path == file.original_path)
-            .ok_or_else(|| anyhow::anyhow!("No mapping found for file: {}", file.original_path.display()))?;
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "No mapping found for file: {}",
+                    file.original_path.display()
+                )
+            })?;
 
         // Only restore if we have high confidence (exact match)
         if mapping.confidence < 1.0 {
@@ -397,9 +458,9 @@ impl BuildCleaner {
 
         // Check for conflicts - if file exists and differs, keep existing and skip restoration
         if target_path.exists() {
-            let existing_content = fs::read_to_string(&target_path)
-                .context("Failed to read existing .env file")?;
-            
+            let existing_content =
+                fs::read_to_string(&target_path).context("Failed to read existing .env file")?;
+
             if existing_content != file.content {
                 return Ok(RestoreResult::SkippedConflict);
             }
@@ -412,17 +473,24 @@ impl BuildCleaner {
         Ok(RestoreResult::Restored(target_path))
     }
 
-
     /// Perform standard cleanup (remove all build directory contents)
     fn standard_cleanup(&self) -> Result<()> {
         if self.build_path.exists() {
-            fs::remove_dir_all(&self.build_path)
-                .with_context(|| format!("Failed to remove build directory: {}", self.build_path.display()))?;
+            fs::remove_dir_all(&self.build_path).with_context(|| {
+                format!(
+                    "Failed to remove build directory: {}",
+                    self.build_path.display()
+                )
+            })?;
             println!("✓ Removed existing build directory");
         }
 
-        fs::create_dir_all(&self.build_path)
-            .with_context(|| format!("Failed to create build directory: {}", self.build_path.display()))?;
+        fs::create_dir_all(&self.build_path).with_context(|| {
+            format!(
+                "Failed to create build directory: {}",
+                self.build_path.display()
+            )
+        })?;
         println!("✓ Created clean build directory");
 
         Ok(())
@@ -436,7 +504,6 @@ impl BuildCleaner {
             .as_secs();
         self.backup_dir.join(format!("backup_{}", timestamp))
     }
-
 }
 
 /// Result of restoring a single .env file
@@ -459,7 +526,11 @@ mod tests {
         let cleaner = BuildCleaner::new(
             "/tmp/test",
             true,
-            vec![".env".to_string(), ".env.local".to_string(), ".env.production".to_string()],
+            vec![
+                ".env".to_string(),
+                ".env.local".to_string(),
+                ".env.production".to_string(),
+            ],
             "/tmp/backup".to_string(),
         );
 
@@ -472,7 +543,12 @@ mod tests {
 
     #[test]
     fn test_path_analysis() {
-        let cleaner = BuildCleaner::new("/tmp/test", true, vec![".env".to_string()], "/tmp/backup".to_string());
+        let cleaner = BuildCleaner::new(
+            "/tmp/test",
+            true,
+            vec![".env".to_string()],
+            "/tmp/backup".to_string(),
+        );
 
         let (env, ext) = cleaner.analyze_env_file_path(Path::new("dev/auth/.env"));
         assert_eq!(env, Some("dev".to_string()));
@@ -489,7 +565,12 @@ mod tests {
 
     #[test]
     fn test_path_mapping() {
-        let cleaner = BuildCleaner::new("/tmp/test", true, vec![".env".to_string()], "/tmp/backup".to_string());
+        let cleaner = BuildCleaner::new(
+            "/tmp/test",
+            true,
+            vec![".env".to_string()],
+            "/tmp/backup".to_string(),
+        );
 
         let file = PreservedEnvFile {
             original_path: PathBuf::from("dev/auth/.env"),
@@ -498,7 +579,11 @@ mod tests {
             extensions: vec!["auth".to_string()],
         };
 
-        let new_structure = vec!["dev/auth".to_string(), "dev/base".to_string(), "production/monitoring".to_string()];
+        let new_structure = vec![
+            "dev/auth".to_string(),
+            "dev/base".to_string(),
+            "production/monitoring".to_string(),
+        ];
 
         // Perfect match
         let mapping = cleaner.find_best_path_mapping(&file, &new_structure);
@@ -512,27 +597,30 @@ mod tests {
             environment: Some("staging".to_string()),
             extensions: vec!["auth".to_string()],
         };
-        
+
         let mapping_no_match = cleaner.find_best_path_mapping(&file_no_match, &new_structure);
         assert_eq!(mapping_no_match.confidence, 0.0);
     }
 
     #[test]
     fn test_in_memory_storage() {
-        let cleaner = BuildCleaner::new("/tmp/test", true, vec![".env".to_string()], "/tmp/backup".to_string());
+        let cleaner = BuildCleaner::new(
+            "/tmp/test",
+            true,
+            vec![".env".to_string()],
+            "/tmp/backup".to_string(),
+        );
 
-        let files = vec![
-            PreservedEnvFile {
-                original_path: PathBuf::from(".env"),
-                content: "TEST=value".to_string(),
-                environment: None,
-                extensions: vec![],
-            }
-        ];
+        let files = vec![PreservedEnvFile {
+            original_path: PathBuf::from(".env"),
+            content: "TEST=value".to_string(),
+            environment: None,
+            extensions: vec![],
+        }];
 
         // Test storing in memory
         cleaner.store_env_files_in_memory(&files);
-        
+
         // Test retrieving from memory
         let stored = cleaner.preserved_files.borrow().clone();
         assert!(stored.is_some());
@@ -541,11 +629,18 @@ mod tests {
 
     #[test]
     fn test_backup_path_generation() {
-        let cleaner = BuildCleaner::new("/tmp/test", true, vec![".env".to_string()], "/tmp/backup".to_string());
+        let cleaner = BuildCleaner::new(
+            "/tmp/test",
+            true,
+            vec![".env".to_string()],
+            "/tmp/backup".to_string(),
+        );
         let backup_path = cleaner.get_backup_path();
-        
+
         // Should be in the format /tmp/backup/backup_TIMESTAMP
-        assert!(backup_path.to_string_lossy().starts_with("/tmp/backup/backup_"));
+        assert!(backup_path
+            .to_string_lossy()
+            .starts_with("/tmp/backup/backup_"));
     }
 
     #[test]
@@ -554,27 +649,32 @@ mod tests {
         let restored = RestoreResult::Restored(PathBuf::from("/test/path"));
         let skipped_no_match = RestoreResult::SkippedNoMatch;
         let skipped_conflict = RestoreResult::SkippedConflict;
-        
+
         match restored {
             RestoreResult::Restored(path) => assert_eq!(path, PathBuf::from("/test/path")),
             _ => panic!("Expected Restored variant"),
         }
-        
+
         match skipped_no_match {
-            RestoreResult::SkippedNoMatch => assert!(true),
+            RestoreResult::SkippedNoMatch => {}
             _ => panic!("Expected SkippedNoMatch variant"),
         }
-        
+
         match skipped_conflict {
-            RestoreResult::SkippedConflict => assert!(true),
+            RestoreResult::SkippedConflict => {}
             _ => panic!("Expected SkippedConflict variant"),
         }
     }
 
     #[test]
     fn test_empty_structure_restoration() {
-        let cleaner = BuildCleaner::new("/tmp/test", true, vec![".env".to_string()], "/tmp/backup".to_string());
-        
+        let cleaner = BuildCleaner::new(
+            "/tmp/test",
+            true,
+            vec![".env".to_string()],
+            "/tmp/backup".to_string(),
+        );
+
         let file = PreservedEnvFile {
             original_path: PathBuf::from(".env"),
             content: "TEST=value".to_string(),

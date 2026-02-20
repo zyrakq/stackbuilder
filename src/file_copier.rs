@@ -1,8 +1,8 @@
-use std::path::{Path, PathBuf};
-use std::fs;
-use std::collections::HashMap;
 use anyhow::{Context, Result};
 use glob::Pattern;
+use std::collections::HashMap;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use crate::config::Config;
 
@@ -31,7 +31,9 @@ pub struct FileCopier {
 impl FileCopier {
     /// Create a new FileCopier instance
     pub fn new(config: Config) -> Result<Self> {
-        let exclude_patterns = config.build.exclude_patterns
+        let exclude_patterns = config
+            .build
+            .exclude_patterns
             .iter()
             .map(|pattern| Pattern::new(pattern))
             .collect::<Result<Vec<_>, _>>()
@@ -59,7 +61,7 @@ impl FileCopier {
 
         // Discover all files from components
         let mut file_map = HashMap::new();
-        
+
         // 1. Discover base files (lowest priority)
         self.discover_files(
             Path::new(&self.config.paths.base_dir),
@@ -144,22 +146,22 @@ impl FileCopier {
 
             if path.is_dir() {
                 // Recursively process subdirectories
-                self.discover_files_recursive(
-                    root_dir,
-                    &path,
-                    priority,
-                    component_name,
-                    file_map,
-                )?;
+                self.discover_files_recursive(root_dir, &path, priority, component_name, file_map)?;
             } else if path.is_file() {
                 // Process file
-                let relative_path = path.strip_prefix(root_dir)
-                    .with_context(|| format!("Failed to get relative path for: {}", path.display()))?
+                let relative_path = path
+                    .strip_prefix(root_dir)
+                    .with_context(|| {
+                        format!("Failed to get relative path for: {}", path.display())
+                    })?
                     .to_path_buf();
 
                 // Check if file should be excluded
                 if self.should_exclude_file(&relative_path) {
-                    println!("  Excluding file: {} (matches exclude pattern)", relative_path.display());
+                    println!(
+                        "  Excluding file: {} (matches exclude pattern)",
+                        relative_path.display()
+                    );
                     continue;
                 }
 
@@ -180,12 +182,12 @@ impl FileCopier {
     /// Determine if a file should be excluded based on patterns
     fn should_exclude_file(&self, relative_path: &Path) -> bool {
         let path_str = relative_path.to_string_lossy();
-        
+
         for pattern in &self.exclude_patterns {
             if pattern.matches(&path_str) {
                 return true;
             }
-            
+
             // Also check just the filename
             if let Some(filename) = relative_path.file_name() {
                 let filename_str = filename.to_string_lossy();
@@ -257,7 +259,7 @@ impl FileCopier {
         output_dir: &Path,
     ) -> Result<()> {
         let dest_path = output_dir.join(relative_path);
-        
+
         // Create parent directories if they don't exist
         if let Some(parent) = dest_path.parent() {
             fs::create_dir_all(parent)
@@ -265,12 +267,13 @@ impl FileCopier {
         }
 
         // Copy the file
-        fs::copy(&file_info.source_path, &dest_path)
-            .with_context(|| format!(
+        fs::copy(&file_info.source_path, &dest_path).with_context(|| {
+            format!(
                 "Failed to copy file from {} to {}",
                 file_info.source_path.display(),
                 dest_path.display()
-            ))?;
+            )
+        })?;
 
         // Preserve permissions on Unix systems
         #[cfg(unix)]

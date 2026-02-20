@@ -47,9 +47,10 @@ mod tests {
         });
         assert!(config_error.suggests_init());
 
-        let _validation_error = StackBuilderError::Validation(ValidationError::ComponentsDirectoryNotFound {
-            path: "/test".into(),
-        });
+        let _validation_error =
+            StackBuilderError::Validation(ValidationError::ComponentsDirectoryNotFound {
+                path: "/test".into(),
+            });
         assert!(config_error.suggests_init());
 
         let build_error = StackBuilderError::Build(BuildError::BuildProcessFailed {
@@ -64,7 +65,10 @@ mod tests {
             file: "test.toml".to_string(),
         });
         assert!(config_error.suggestion().is_some());
-        assert!(config_error.suggestion().unwrap().contains("stackbuilder init"));
+        assert!(config_error
+            .suggestion()
+            .unwrap()
+            .contains("stackbuilder init"));
 
         let ext_error = StackBuilderError::Validation(ValidationError::ExtensionNotFound {
             name: "monitoring".to_string(),
@@ -86,7 +90,8 @@ mod tests {
         assert!(error.to_string().contains("not found"));
 
         // Create a simple TOML parse error by trying to parse invalid content
-        let toml_result: std::result::Result<toml::Value, toml::de::Error> = toml::from_str("invalid toml [");
+        let toml_result: std::result::Result<toml::Value, toml::de::Error> =
+            toml::from_str("invalid toml [");
         if let Err(toml_error) = toml_result {
             let error = ConfigError::toml_parse_error("test.toml", toml_error);
             assert!(error.to_string().contains("test.toml"));
@@ -100,7 +105,10 @@ mod tests {
         assert!(error.to_string().contains("dev"));
         assert!(error.to_string().contains("/test/envs"));
 
-        let error = ValidationError::extension_not_found("monitoring", vec!["ext1".to_string(), "ext2".to_string()]);
+        let error = ValidationError::extension_not_found(
+            "monitoring",
+            vec!["ext1".to_string(), "ext2".to_string()],
+        );
         assert!(error.to_string().contains("monitoring"));
         assert!(error.to_string().contains("ext1"));
         assert!(error.to_string().contains("ext2"));
@@ -113,7 +121,8 @@ mod tests {
         assert!(error.to_string().contains("invalid syntax"));
 
         // Create a serde_yaml error by trying to parse invalid YAML
-        let yaml_result: std::result::Result<serde_yaml_ng::Value, serde_yaml_ng::Error> = serde_yaml_ng::from_str("invalid: yaml: [");
+        let yaml_result: std::result::Result<serde_yaml_ng::Value, serde_yaml_ng::Error> =
+            serde_yaml_ng::from_str("invalid: yaml: [");
         if let Err(serde_error) = yaml_result {
             let error = YamlError::serde_error("test.yml", serde_error);
             assert!(error.to_string().contains("test.yml"));
@@ -139,7 +148,7 @@ mod tests {
             source: io_error,
         };
         let stack_error = StackBuilderError::FileSystem(fs_error);
-        
+
         let display = format!("{}", stack_error);
         assert!(display.contains("/test/file"));
         assert!(display.contains("Failed to read file"));
