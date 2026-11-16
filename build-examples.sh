@@ -13,7 +13,7 @@ if [ ! -d "$EXAMPLES_DIR" ]; then
     exit 1
 fi
 
-# Считаем примеры
+# Count the examples
 count=0
 for dir in "$EXAMPLES_DIR"/*/; do
     if [ -d "$dir" ]; then
@@ -24,7 +24,7 @@ done
 echo "Found $count examples"
 echo ""
 
-# Собираем каждый пример
+# Build each example
 success=0
 failed=0
 failed_examples=""
@@ -43,7 +43,7 @@ for dir in "$EXAMPLES_DIR"/*/; do
             echo "✗ FAILED"
             failed=$((failed + 1))
             failed_examples="$failed_examples $name"
-            # Показываем причину ошибки
+            # Show the cause of the failure
             if [ -f "$log_file" ]; then
                 error_msg=$(tail -1 "$log_file")
                 echo "    $error_msg"
